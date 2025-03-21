@@ -32,17 +32,6 @@ def create_tables():
     );
     """)
 
-    # 创建 friend_request 表
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS friend_request (
-        id SERIAL PRIMARY KEY,
-        sender_id INT NOT NULL,
-        receiver_id INT NOT NULL,
-        status VARCHAR(20) DEFAULT 'pending' NOT NULL,
-        FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-    """)
     # cursor.execute("DROP TABLE IF EXISTS friends CASCADE;")
 
     # 📌 创建 friends 表，存储已接受的好友关系
@@ -68,6 +57,8 @@ create_tables()
 @app.route('/')
 def home():
     return render_template('index.html')
+
+
 # 📌 用户注册
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -86,6 +77,8 @@ def register():
         return redirect(url_for('login'))
 
     return render_template('register.html')
+
+
 
 # 📌 用户登录
 @app.route('/login', methods=['GET', 'POST'])
@@ -211,6 +204,121 @@ def respond_friend_request():
 
     return jsonify({"message": f"好友请求已{action}"}), 200
 
+@app.route('/search_stock', methods=['GET', 'POST'])
+def search_stock():
+    results = []
+
+    if request.method == 'POST':
+        keyword = request.form.get('keyword')
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 使用 SQL LIKE 进行模糊匹配
+        cursor.execute("""
+            SELECT symbol, company_name, current_price 
+            FROM stock 
+            WHERE symbol ILIKE %s
+        """, (f"%{keyword}%",))
+
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+    return render_template('search_stock.html', results=results)
+
+
+
+@app.route('/add_to_watchlist', methods=['POST'])
+def add_to_watchlist():
+    if 'user_id' not in session:
+        return jsonify({'message': '请先登录'}), 401
+
+    data = request.json
+    symbol = data.get('symbol')
+    watchlistname = data.get('watchlistname', 'default')  # 默认为 default list
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO watchlist (symbol, watchlistname, owner)
+            VALUES (%s, %s, %s)
+            ON CONFLICT DO NOTHING;
+        """, (symbol, watchlistname, session['user_id']))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': f'添加失败: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+    return jsonify({'message': f'{symbol} 已加入自选股（{watchlistname}）'}), 200
+
+
+@app.route('/add_to_portfolio', methods=['POST'])
+def add_to_portfolio():
+    if 'user_id' not in session:
+        return jsonify({'message': '请先登录'}), 401
+
+    data = request.json
+    symbol = data.get('symbol')
+    qty = data.get('qty', 0)
+    price = data.get('price', None)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO portfolio (symbol, qty, owner, price)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (symbol, owner) DO UPDATE
+            SET qty = portfolio.qty + EXCLUDED.qty;
+        """, (symbol, qty, session['user_id'], price))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'message': f'添加失败: {str(e)}'}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+    return jsonify({'message': f'{symbol} 已加入 Portfolio，数量：{qty}'})
+
+
+
+@app.route('/portfolio_watchlist')
+def portfolio_watchlist():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    user_id = session['user_id']
+
+    # 获取 Portfolio 数据
+    cursor.execute("""
+        SELECT p.symbol, s.company_name, p.qty, p.price, p.time
+        FROM portfolio p
+        JOIN stock s ON p.symbol = s.symbol
+        WHERE p.owner = %s;
+    """, (user_id,))
+    portfolio = cursor.fetchall()
+
+    # 获取 Watchlist 数据
+    cursor.execute("""
+        SELECT w.symbol, s.company_name, w.watchlistname
+        FROM watchlist w
+        JOIN stock s ON w.symbol = s.symbol
+        WHERE w.owner = %s;
+    """, (user_id,))
+    watchlist = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template("portfolio_watchlist.html", portfolio=portfolio, watchlist=watchlist, current_user=session['username'])
 
 
 # 📌 用户登出

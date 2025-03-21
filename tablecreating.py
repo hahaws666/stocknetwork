@@ -11,11 +11,11 @@ conn = psycopg2.connect(
 
 cursor = conn.cursor()
 
-# 先删除 `StockHistory`，然后删除 `Stock`
-drop_tables = """
-DROP TABLE IF EXISTS StockHistory CASCADE;
-DROP TABLE IF EXISTS Stock CASCADE;
-"""
+# # 先删除 `StockHistory`，然后删除 `Stock`
+# drop_tables = """
+# DROP TABLE IF EXISTS StockHistory CASCADE;
+# DROP TABLE IF EXISTS Stock CASCADE;
+# """
 
 # 创建 `Stock` 表
 create_stock_table = """
@@ -42,9 +42,30 @@ CREATE TABLE IF NOT EXISTS StockHistory (
 """
 
 # 执行 SQL 语句
-cursor.execute(drop_tables)  # 先删除表，避免冲突
+# cursor.execute(drop_tables)  # 先删除表，避免冲突
 cursor.execute(create_stock_table)
 cursor.execute(create_stockhistory_table)
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS portfolio (
+        symbol VARCHAR(10) REFERENCES stock(symbol),
+        qty INT NOT NULL,
+        owner INT REFERENCES users(id),
+        price FLOAT,
+        time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (symbol, owner)
+    );
+""")
+
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS watchlist (
+        symbol VARCHAR(10) REFERENCES stock(symbol),
+        watchlistname VARCHAR(100),
+        owner INT REFERENCES users(id),
+        PRIMARY KEY (watchlistname, owner)
+    );
+""")
+
+
 
 # 提交更改并关闭连接
 conn.commit()
