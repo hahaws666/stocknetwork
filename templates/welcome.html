@@ -8,7 +8,7 @@
             fetch('/send_friend_request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ receiver_id: receiverId })
+                body: JSON.stringify({ user2_id: receiverId })
             })
             .then(response => response.json())
             .then(data => alert(data.message))
@@ -19,7 +19,23 @@
             fetch('/respond_friend_request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sender_id: senderId, action: action })
+                body: JSON.stringify({ user1_id: senderId, action: action })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function deleteFriend(friendId) {
+            if (!confirm("确定要删除这个好友吗？")) return;
+
+            fetch('/delete_friend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ friend_id: friendId })
             })
             .then(response => response.json())
             .then(data => {
@@ -60,15 +76,17 @@
     <h2>你的好友列表：</h2>
     <ul>
         {% for friend in friends %}
-        <li>{{ friend[1] }}</li>
+        <li>
+            {{ friend[1] }}
+            <button onclick="deleteFriend({{ friend[0] }})" style="color: red;">删除</button>
+        </li>
         {% else %}
         <li>你还没有好友。</li>
         {% endfor %}
     </ul>
-    <a href="/search_stock">🔍 搜索股票</a>
-    <a href="/portfolio_watchlist"> go to profolio and watchlist</a>
-    <a href="/watchlist_dashboard">📊 查看自选股 Dashboard</a>
 
-
+    <a href="/search_stock">🔍 搜索股票</a> |
+    <a href="/portfolio_watchlist">📁 Portfolio & Watchlist</a> |
+    <a href="/watchlist_dashboard">📊 自选股 Dashboard</a>
 </body>
 </html>

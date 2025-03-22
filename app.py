@@ -34,17 +34,19 @@ def create_tables():
 
     # cursor.execute("DROP TABLE IF EXISTS friends CASCADE;")
 
-    # 📌 创建 friends 表，存储已接受的好友关系
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS friends (
-        user1_id INT NOT NULL,
-        user2_id INT NOT NULL,
-        approved BOOLEAN DEFAULT FALSE,
-        PRIMARY KEY (user1_id, user2_id),
-        FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE
-    );
+        CREATE TABLE IF NOT EXISTS friends (
+           user1_id INT NOT NULL,
+            user2_id INT NOT NULL,
+            status INT NOT NULL CHECK (status IN (-1, 0, 1)),  -- -1: 拒绝, 0: 待处理, 1: 好友
+            timestamp TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (user1_id, user2_id),
+            FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE
+        );
     """)
+
+
 
     conn.commit()
     cursor.close()
@@ -110,26 +112,29 @@ def welcome():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    current_user_id = session['user_id']
+
     # 所有其他用户（可用于发送请求）
-    cursor.execute("SELECT id, username FROM users;")
+    cursor.execute("SELECT id, username FROM users WHERE id != %s;", (current_user_id,))
     users = cursor.fetchall()
 
-    # 收到的好友请求（pending）
+    # 收到的好友请求（status = 0）
     cursor.execute("""
-        SELECT users.id, users.username FROM friends
-        JOIN users ON friends.user1_id = users.id
-        WHERE friends.user2_id = %s AND friends.approved = FALSE;
-    """, (session['user_id'],))
+        SELECT u.id, u.username
+        FROM friends f
+        JOIN users u ON f.user1_id = u.id
+        WHERE f.user2_id = %s AND f.status = 0;
+    """, (current_user_id,))
     friend_requests = cursor.fetchall()
 
-    # 📌 所有已经通过的好友（双向考虑）
+    # 所有已经通过的好友（双向考虑，status = 1）
     cursor.execute("""
-        SELECT DISTINCT u.id, u.username FROM friends f
+        SELECT DISTINCT u.id, u.username
+        FROM friends f
         JOIN users u ON 
-            (u.id = f.user1_id AND f.user2_id = %s) OR 
-            (u.id = f.user2_id AND f.user1_id = %s)
-        WHERE f.approved = TRUE;
-    """, (session['user_id'], session['user_id']))
+            (f.status = 1 AND u.id = f.user1_id AND f.user2_id = %s)
+         OR (f.status = 1 AND u.id = f.user2_id AND f.user1_id = %s);
+    """, (current_user_id, current_user_id))
     friends = cursor.fetchall()
 
     cursor.close()
@@ -141,9 +146,8 @@ def welcome():
         friend_requests=friend_requests,
         friends=friends,
         current_user=session['username'],
-        current_user_id=session['user_id']
+        current_user_id=current_user_id
     )
-
 
 
 @app.route('/send_friend_request', methods=['POST'])
@@ -152,26 +156,48 @@ def send_friend_request():
         return jsonify({"message": "请先登录"}), 401
 
     data = request.json
-    sender_id = session['user_id']
-    receiver_id = data.get("receiver_id")
+    user1_id = session['user_id']
+    user2_id = data.get("user2_id")
 
-    if sender_id == receiver_id:
+    if user1_id == user2_id:
         return jsonify({"message": "不能添加自己为好友"}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 检查是否已有好友请求
-    cursor.execute("SELECT * FROM friends WHERE  user1_id = %s AND user2_id  = %s;", (sender_id, receiver_id))
-    existing_request = cursor.fetchone()
+    # 检查是否已有记录（用于避免重复请求 & 判断冷却时间）
+    cursor.execute("""
+        SELECT status, timestamp FROM friends 
+        WHERE user1_id = %s AND user2_id = %s
+    """, (user1_id, user2_id))
 
-    if existing_request:
-        cursor.close()
-        conn.close()
-        return jsonify({"message": "好友请求已存在"}), 400
+    existing = cursor.fetchone()
 
-    # **在 friends 表中插入好友请求，approved = FALSE**
-    cursor.execute("INSERT INTO friends (user1_id , user2_id , approved) VALUES (%s, %s, FALSE);", (sender_id, receiver_id))
+    from datetime import datetime, timedelta
+    now = datetime.now()
+
+    if existing:
+        status, ts = existing
+        if status == 0:
+            return jsonify({"message": "请求已发送"}), 400
+        elif status == 1:
+            return jsonify({"message": "你们已经是好友"}), 400
+        elif status == -1 and (now - ts).total_seconds() < 300:
+            return jsonify({"message": "冷却中，5分钟后再发送"}), 400
+        else:
+            # 超过冷却时间后，更新为新的请求
+            cursor.execute("""
+                UPDATE friends SET status = 0, timestamp = NOW()
+                WHERE user1_id = %s AND user2_id = %s
+            """, (user1_id, user2_id))
+    else:
+    # 没有记录，插入新的请求
+        cursor.execute("""
+            INSERT INTO friends (user1_id, user2_id, status)
+            VALUES (%s, %s, 0)
+        """, (user1_id, user2_id))
+
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -185,24 +211,65 @@ def respond_friend_request():
         return jsonify({"message": "请先登录"}), 401
 
     data = request.json
-    sender_id = data.get("sender_id")
-    action = data.get("action")  # "accept" or "reject"
+    user1_id = data.get("user1_id")
+    user2_id = session['user_id']
+    action = data.get("action")
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     if action == "accept":
-        cursor.execute("UPDATE friends SET approved = TRUE WHERE user1_id  = %s AND user2_id  = %s;",
-                       (sender_id, session['user_id']))
+        cursor.execute("""
+            UPDATE friends SET status = 1, timestamp = NOW()
+            WHERE user1_id = %s AND user2_id = %s AND status = 0
+        """, (user1_id, user2_id))
     elif action == "reject":
-        cursor.execute("DELETE FROM friends WHERE user1_id  = %s AND user2_id  = %s;",
-                       (sender_id, session['user_id']))
+        cursor.execute("""
+            UPDATE friends SET status = -1, timestamp = NOW()
+            WHERE user1_id = %s AND user2_id = %s AND status = 0
+        """, (user1_id, user2_id))
 
     conn.commit()
     cursor.close()
     conn.close()
 
     return jsonify({"message": f"好友请求已{action}"}), 200
+
+@app.route('/delete_friend', methods=['POST'])
+def delete_friend():
+    if 'user_id' not in session:
+        return jsonify({"message": "请先登录"}), 401
+
+    data = request.get_json()
+    user_id = session['user_id']
+    friend_id = data.get("friend_id")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 删除任何方向的好友记录（双向可能）
+    cursor.execute("""
+        DELETE FROM friends
+        WHERE 
+            (user1_id = %s AND user2_id = %s AND status = 1)
+         OR (user1_id = %s AND user2_id = %s AND status = 1)
+    """, (user_id, friend_id, friend_id, user_id))
+
+    # 写入一条冷却记录（只存当前用户为 user1）
+    cursor.execute("""
+        INSERT INTO friends (user1_id, user2_id, status, timestamp)
+        VALUES (%s, %s, -1, NOW())
+        ON CONFLICT (user1_id, user2_id)
+        DO UPDATE SET status = -1, timestamp = NOW()
+    """, (friend_id,user_id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"message": "好友已删除"})
+
+
 
 @app.route('/search_stock', methods=['GET', 'POST'])
 def search_stock():
