@@ -88,5 +88,33 @@
     <a href="/search_stock">🔍 搜索股票</a> |
     <a href="/portfolio_watchlist">📁 Portfolio & Watchlist</a> |
     <a href="/watchlist_dashboard">📊 自选股 Dashboard</a>
+
+    <h2>🗂️ 可访问的 Stocklists（Public）</h2>
+    <ul>
+      {% for owner_id, owner_name, list_name in public_watchlists %}
+        <li>
+          {{ owner_name }} 的「{{ list_name }}」
+          <a href="{{ url_for('view_watchlist', owner_id=owner_id, watchlist_name=list_name) }}">查看评论</a>
+        </li>
+      {% else %}
+        <li>暂无公开 stocklists。</li>
+      {% endfor %}
+    </ul>
+    <h2>🌐 所有公开的 Stocklist</h2>
+<ul>
+    {% for owner_id, owner_name, list_name in public_stocklists %}
+        <li>
+            {{ owner_name }} 的 「{{ list_name }}」
+            <a href="{{ url_for('view_watchlist', owner_id=owner_id, watchlist_name=list_name) }}">查看评论</a>
+            |
+            <a href="{{ url_for('watchlist_performance', owner_id=owner_id, watchlist_name=list_name) }}">查看表现</a>
+            
+        </li>
+    {% else %}
+        <li>暂无公开的 Stocklist</li>
+    {% endfor %}
+</ul>
+
+    
 </body>
 </html>

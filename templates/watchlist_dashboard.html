@@ -32,6 +32,10 @@
         h2 {
             margin-top: 0;
         }
+        .visibility-toggle {
+            float: right;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -41,7 +45,17 @@
 
     {% for watchlist_name, stocks in watchlist_grouped.items() %}
     <div class="watchlist-section">
-        <h2>📌 {{ watchlist_name }}</h2>
+        <h2>
+            📌 {{ watchlist_name }}
+            <span class="visibility-toggle">
+                可见性：
+                <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
+                    <option value="0" {% if visibility_data[watchlist_name] == 0 %}selected{% endif %}>私有</option>
+                    <option value="1" {% if visibility_data[watchlist_name] == 1 %}selected{% endif %}>好友共享</option>
+                    <option value="2" {% if visibility_data[watchlist_name] == 2 %}selected{% endif %}>公开</option>
+                </select>
+            </span>
+        </h2>
 
         <canvas id="lineChart_{{ watchlist_name }}"></canvas>
 
@@ -50,14 +64,14 @@
                 <th>股票符号</th>
                 <th>公司名称</th>
                 <th>当前价格</th>
-                <th>数量</th> <!-- ✅ 新增列 -->
+                <th>数量</th>
             </tr>
             {% for stock in stocks %}
             <tr>
                 <td>{{ stock[0] }}</td>
                 <td>{{ stock[1] or "N/A" }}</td>
                 <td>${{ "%.2f"|format(stock[2]) }}</td>
-                <td>{{ stock[3] }}</td> <!-- ✅ 显示数量 -->
+                <td>{{ stock[3] }}</td>
             </tr>
             {% endfor %}
         </table>
@@ -82,7 +96,7 @@
             borderWidth: 2,
             fill: false,
             tension: 0.3,
-            borderColor: '#' + Math.floor(Math.random()*16777215).toString(16)
+            borderColor: '#' + Math.floor(Math.random() * 16777215).toString(16)
         },
         {% endfor %}
     ];
@@ -138,7 +152,17 @@
         }
     });
     {% endfor %}
-</script>
 
+    function toggleVisibility(watchlistName, visible) {
+        fetch("/toggle_visibility", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ watchlist_name: watchlistName, visible: parseInt(visible) })
+        })
+        .then(response => response.json())
+        .then(data => alert(data.message))
+        .catch(err => console.error("切换失败", err));
+    }
+</script>
 </body>
 </html>

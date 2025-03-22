@@ -46,6 +46,49 @@ def create_tables():
         );
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS stocklist_data (
+        owner INT NOT NULL,
+        name TEXT NOT NULL,
+        visible INT NOT NULL DEFAULT 0 CHECK (visible IN (0, 1, 2)),  -- 0: private, 1: shared, 2: public
+        covariance DOUBLE PRECISION,
+        beta DOUBLE PRECISION,
+        PRIMARY KEY (owner, name),
+        FOREIGN KEY (owner) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    """)
+
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reviews (
+            user_id INT NOT NULL,
+            stocklist_owner INT NOT NULL,
+            stocklist_name TEXT NOT NULL,
+            content TEXT CHECK (char_length(content) <= 4000),
+            timestamp TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (user_id, stocklist_owner, stocklist_name),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (stocklist_owner, stocklist_name) REFERENCES stocklist_data(owner, name) ON DELETE CASCADE
+        );
+
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS comments (
+        id SERIAL PRIMARY KEY,
+        user_id INT NOT NULL,
+        watchlist_owner INT NOT NULL,
+        watchlist_name TEXT NOT NULL,
+        timestamp TIMESTAMP DEFAULT NOW(),
+        content TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (watchlist_owner, watchlist_name) REFERENCES stocklist_data(owner, name) ON DELETE CASCADE
+    );
+
+    """)
+
+
 
 
     conn.commit()
@@ -109,16 +152,19 @@ def welcome():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    current_user_id = session['user_id']
+    user_id = session['user_id']  # ✅ 你漏了这一句！
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    current_user_id = session['user_id']
-
-    # 所有其他用户（可用于发送请求）
-    cursor.execute("SELECT id, username FROM users WHERE id != %s;", (current_user_id,))
+    # 🔹 1. 获取所有其他用户（用于添加好友）
+    cursor.execute("""
+        SELECT id, username FROM users WHERE id != %s;
+    """, (current_user_id,))
     users = cursor.fetchall()
 
-    # 收到的好友请求（status = 0）
+    # 🔹 2. 获取收到的好友请求（pending）
     cursor.execute("""
         SELECT u.id, u.username
         FROM friends f
@@ -127,24 +173,55 @@ def welcome():
     """, (current_user_id,))
     friend_requests = cursor.fetchall()
 
-    # 所有已经通过的好友（双向考虑，status = 1）
+    # 🔹 3. 获取已经建立的好友关系（双向 status = 1）
     cursor.execute("""
         SELECT DISTINCT u.id, u.username
         FROM friends f
-        JOIN users u ON 
-            (f.status = 1 AND u.id = f.user1_id AND f.user2_id = %s)
-         OR (f.status = 1 AND u.id = f.user2_id AND f.user1_id = %s);
+        JOIN users u ON (
+            (f.user1_id = u.id AND f.user2_id = %s)
+            OR (f.user2_id = u.id AND f.user1_id = %s)
+        )
+        WHERE f.status = 1;
     """, (current_user_id, current_user_id))
     friends = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT DISTINCT s.owner, u.username, s.name
+        FROM stocklist_data s
+        JOIN users u ON s.owner = u.id
+        WHERE 
+            s.visible = 2  -- public
+            OR (s.visible = 1 AND (
+                s.owner = %s
+                OR s.owner IN (
+                    SELECT f.user1_id FROM friends f WHERE f.user2_id = %s AND f.status = 1
+                    UNION
+                    SELECT f.user2_id FROM friends f WHERE f.user1_id = %s AND f.status = 1
+                )
+            ))
+            OR (s.visible = 0 AND (
+                s.owner = %s
+                OR EXISTS (
+                    SELECT 1 FROM comments c
+                    WHERE c.watchlist_owner = s.owner AND c.watchlist_name = s.name AND c.user_id = %s
+                )
+            ))
+    """, (user_id, user_id, user_id, user_id, user_id))
+
+
+    public_stocklists = cursor.fetchall()
+
 
     cursor.close()
     conn.close()
 
+    # 🔹 5. 渲染页面
     return render_template(
         'welcome.html',
         users=users,
         friend_requests=friend_requests,
         friends=friends,
+        public_stocklists=public_stocklists,
         current_user=session['username'],
         current_user_id=current_user_id
     )
@@ -310,6 +387,15 @@ def add_to_watchlist():
     cursor = conn.cursor()
 
     try:
+
+        # ✅ Step 1: 自动插入 stocklist_data 行（如果不存在）
+        cursor.execute("""
+            INSERT INTO stocklist_data (owner, name, visible)
+            VALUES (%s, %s, 0)
+            ON CONFLICT (owner, name) DO NOTHING;
+        """, (user_id, watchlistname))
+
+
         cursor.execute("""
             INSERT INTO watchlist (symbol, watchlistname, owner, quantity)
             VALUES (%s, %s, %s, %s)
@@ -402,31 +488,39 @@ def watchlist_dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    user_id = session['user_id']
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 查询当前用户所有 watchlist 股票（带 watchlistname 分组）
+    # 查询 watchlist 股票数据
     cursor.execute("""
         SELECT w.watchlistname, w.symbol, s.company_name, s.current_price, w.quantity
         FROM watchlist w
         JOIN stock s ON w.symbol = s.symbol
         WHERE w.owner = %s
-    """, (session['user_id'],))
-
+    """, (user_id,))
     raw_watchlist = cursor.fetchall()
 
-    # group by watchlistname
+    # 分组并收集数据
     watchlist_grouped = {}
     for watchlistname, symbol, company, price, quantity in raw_watchlist:
         if watchlistname not in watchlist_grouped:
             watchlist_grouped[watchlistname] = []
         watchlist_grouped[watchlistname].append((symbol, company, price, quantity))
 
-    # 获取每只股票的时间序列数据（2013-01-01 至 2018-02-07）
+    # ✅ 加载 visibility_data
+    cursor.execute("""
+        SELECT name, visible FROM stocklist_data
+        WHERE owner = %s
+    """, (user_id,))
+    vis_rows = cursor.fetchall()
+    visibility_data = {name: visible for name, visible in vis_rows}
+
+    # 查询历史价格
     history_data = {}
     for stocks in watchlist_grouped.values():
         for symbol, _, _, _ in stocks:
-            if symbol not in history_data:  # 防止重复查同一股票
+            if symbol not in history_data:
                 cursor.execute("""
                     SELECT date, close_price FROM stockhistory
                     WHERE symbol = %s AND date BETWEEN '2013-01-01' AND '2018-02-07'
@@ -434,15 +528,229 @@ def watchlist_dashboard():
                 """, (symbol,))
                 rows = cursor.fetchall()
                 history_data[symbol] = [
-                    {'date': row[0].strftime('%Y-%m-%d'), 'price': row[1]}
-                    for row in rows
+                    {'date': row[0].strftime('%Y-%m-%d'), 'price': row[1]} for row in rows
                 ]
 
     cursor.close()
     conn.close()
 
-    return render_template("watchlist_dashboard.html",
-                           watchlist_grouped=watchlist_grouped,
+    return render_template(
+        "watchlist_dashboard.html",
+        watchlist_grouped=watchlist_grouped,
+        history_data=history_data,
+        visibility_data=visibility_data  # ✅ 必须传入
+    )
+
+
+
+
+@app.route('/watchlist/<int:owner_id>/<watchlist_name>')
+def view_watchlist(owner_id, watchlist_name):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    user_id = session['user_id']
+    is_creator = (user_id == owner_id)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 查询 stocklist 是否存在 & 可见性
+    cursor.execute("""
+        SELECT visible FROM stocklist_data
+        WHERE owner = %s AND name = %s
+    """, (owner_id, watchlist_name))
+    result = cursor.fetchone()
+
+    if not result:
+        cursor.close()
+        conn.close()
+        return "❌ Stocklist 不存在", 404
+
+    visible = result[0]
+
+    # 如果不是公开且不是创建者，再检查是否评论过
+    if not visible and not is_creator:
+        cursor.execute("""
+            SELECT 1 FROM comments
+            WHERE user_id = %s AND watchlist_owner = %s AND watchlist_name = %s
+            LIMIT 1
+        """, (user_id, owner_id, watchlist_name))
+        has_commented = cursor.fetchone() is not None
+
+        if not has_commented:
+            cursor.close()
+            conn.close()
+            return "❌ 该 stocklist 未公开，且你不是评论者或拥有者", 403
+
+    # ✅ 获取所有评论（含评论 ID, user_id, username, content, timestamp）
+    cursor.execute("""
+        SELECT c.id, c.user_id, u.username, c.content, c.timestamp
+        FROM comments c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.watchlist_owner = %s AND c.watchlist_name = %s
+        ORDER BY c.timestamp DESC
+    """, (owner_id, watchlist_name))
+    comments = cursor.fetchall()
+
+    # ✅ 当前用户的评论（用于编辑表单）
+    cursor.execute("""
+        SELECT content FROM comments
+        WHERE user_id = %s AND watchlist_owner = %s AND watchlist_name = %s
+        LIMIT 1
+    """, (user_id, owner_id, watchlist_name))
+    my_comment = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'watchlist_comments.html',
+        comments=comments,
+        watchlist_name=watchlist_name,
+        owner_id=owner_id,
+        current_user_id=user_id,
+        my_comment=my_comment,
+        is_creator=is_creator
+    )
+
+
+@app.route('/submit_comment', methods=['POST'])
+def submit_comment():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    data = request.form
+    user_id = session['user_id']
+    owner_id = int(data['owner_id'])
+    watchlist_name = data['watchlist_name']
+    text = data['text']
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 是否已有评论
+    cursor.execute("""
+        SELECT id FROM comments
+        WHERE user_id = %s AND watchlist_owner = %s AND watchlist_name = %s
+    """, (user_id, owner_id, watchlist_name))
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute("""
+            UPDATE comments SET content = %s, timestamp = NOW()
+            WHERE id = %s
+        """, (text, existing[0]))
+    else:
+        cursor.execute("""
+            INSERT INTO comments (user_id, watchlist_owner, watchlist_name, content)
+            VALUES (%s, %s, %s, %s)
+        """, (user_id, owner_id, watchlist_name, text))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('view_watchlist', owner_id=owner_id, watchlist_name=watchlist_name))
+
+
+@app.route('/delete_comment', methods=['POST'])
+def delete_comment():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    comment_id = request.args.get('comment_id')
+    user_id = session['user_id']
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 检查权限（评论作者或 stocklist owner）
+    cursor.execute("""
+        SELECT user_id, watchlist_owner, watchlist_name FROM comments WHERE id = %s
+    """, (comment_id,))
+    comment = cursor.fetchone()
+
+    if not comment:
+        return "评论不存在", 404
+
+    if user_id != comment[0] and user_id != comment[1]:
+        return "无权限删除该评论", 403
+
+    cursor.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('view_watchlist', owner_id=comment[1], watchlist_name=comment[2]))
+
+
+
+@app.route('/toggle_visibility', methods=['POST'])
+def toggle_visibility():
+    if 'user_id' not in session:
+        return jsonify({'message': '未登录'}), 401
+
+    data = request.json
+    watchlist_name = data.get('watchlist_name')
+    new_status = data.get('visible')  # 应为 0, 1 或 2
+    user_id = session['user_id']
+
+    # 校验 visible 值是否合法
+    if new_status not in [0, 1, 2]:
+        return jsonify({'message': '无效的可见性值'}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 更新数据库中对应 watchlist 的可见性
+    cursor.execute("""
+        UPDATE stocklist_data
+        SET visible = %s
+        WHERE owner = %s AND name = %s;
+    """, (new_status, user_id, watchlist_name))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({'message': '可见性更新成功 ✅'})
+
+
+
+@app.route('/watchlist/<int:owner_id>/<watchlist_name>/performance')
+def watchlist_performance(owner_id, watchlist_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 获取该 watchlist 中所有的股票 symbol + 数量
+    cursor.execute("""
+        SELECT w.symbol, s.company_name, s.current_price, w.quantity
+        FROM watchlist w
+        JOIN stock s ON w.symbol = s.symbol
+        WHERE w.owner = %s AND w.watchlistname = %s
+    """, (owner_id, watchlist_name))
+    stocks = cursor.fetchall()
+
+    # 每个 symbol 的历史价格
+    history_data = {}
+    for symbol, _, _, _ in stocks:
+        cursor.execute("""
+            SELECT date, close_price
+            FROM stockhistory
+            WHERE symbol = %s AND date BETWEEN '2013-01-01' AND '2018-02-07'
+            ORDER BY date;
+        """, (symbol,))
+        rows = cursor.fetchall()
+        history_data[symbol] = [{'date': r[0].strftime('%Y-%m-%d'), 'price': r[1]} for r in rows]
+
+    cursor.close()
+    conn.close()
+
+    return render_template("watchlist_performance.html",
+                           stocks=stocks,
+                           watchlist_name=watchlist_name,
+                           owner_id=owner_id,
                            history_data=history_data)
 
 

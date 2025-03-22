@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Stocklist Performance</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+    }
+    h2 {
+      text-align: center;
+    }
+    canvas {
+      margin: auto;
+      display: block;
+      max-width: 1000px;
+      max-height: 500px;
+    }
+    .back-button {
+      display: inline-block;
+      margin-bottom: 20px;
+      background-color: #eee;
+      padding: 6px 12px;
+      border-radius: 6px;
+      text-decoration: none;
+      color: #333;
+      border: 1px solid #ccc;
+    }
+    .back-button:hover {
+      background-color: #ddd;
+    }
+  </style>
+</head>
+<body>
+
+  <a href="/welcome" class="back-button">← 返回</a>
+
+  <h2>📈 Stocklist 表现</h2>
+  <canvas id="performanceChart" width="900" height="400"></canvas>
+
+  <script>
+    const historyData = {{ history_data | tojson }};
+    const ctx = document.getElementById("performanceChart").getContext("2d");
+
+    const datasets = Object.entries(historyData).map(([symbol, points]) => ({
+      label: symbol,
+      data: points.map(p => ({
+        x: new Date(p.date),
+        y: p.price
+      })),
+      borderWidth: 2,
+      fill: false,
+      tension: 0.3,
+      borderColor: '#' + Math.floor(Math.random() * 16777215).toString(16)
+    }));
+
+    new Chart(ctx, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        parsing: false,
+        plugins: {
+          title: {
+            display: true,
+            text: '📈 股票价格走势（2013 - 2018）'
+          },
+          legend: {
+            position: 'bottom'
+          }
+        },
+        scales: {
+          x: {
+            type: 'time',
+            min: '2013-01-01',
+            max: '2018-02-07',
+            time: {
+              unit: 'month',
+              displayFormats: {
+                month: 'yyyy-MM'
+              },
+              tooltipFormat: 'yyyy-MM-dd'
+            },
+            title: {
+              display: true,
+              text: '时间'
+            }
+          },
+          y: {
+            title: {
+              display: true,
+              text: '价格 ($)'
+            },
+            beginAtZero: false
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
