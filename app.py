@@ -233,27 +233,34 @@ def add_to_watchlist():
     if 'user_id' not in session:
         return jsonify({'message': '请先登录'}), 401
 
-    data = request.json
+    data = request.get_json()
     symbol = data.get('symbol')
-    watchlistname = data.get('watchlistname', 'default')  # 默认为 default list
+    watchlistname = data.get('watchlistname', 'default')
+    quantity = int(data.get('quantity', 1))
+    user_id = session['user_id']
 
     conn = get_db_connection()
     cursor = conn.cursor()
+
     try:
         cursor.execute("""
-            INSERT INTO watchlist (symbol, watchlistname, owner)
-            VALUES (%s, %s, %s)
-            ON CONFLICT DO NOTHING;
-        """, (symbol, watchlistname, session['user_id']))
+            INSERT INTO watchlist (symbol, watchlistname, owner, quantity)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (symbol, watchlistname, owner)
+            DO UPDATE SET quantity = watchlist.quantity + EXCLUDED.quantity;
+        """, (symbol, watchlistname, user_id, quantity))
+
         conn.commit()
+        message = f"✅ 已添加 {symbol} x{quantity} 到 {watchlistname}"
     except Exception as e:
         conn.rollback()
-        return jsonify({'message': f'添加失败: {str(e)}'}), 500
+        message = f"❌ 添加失败: {str(e)}"
     finally:
         cursor.close()
         conn.close()
 
-    return jsonify({'message': f'{symbol} 已加入自选股（{watchlistname}）'}), 200
+    return jsonify({'message': message})
+
 
 
 @app.route('/add_to_portfolio', methods=['POST'])
@@ -319,6 +326,59 @@ def portfolio_watchlist():
     conn.close()
 
     return render_template("portfolio_watchlist.html", portfolio=portfolio, watchlist=watchlist, current_user=session['username'])
+
+
+
+
+@app.route('/watchlist_dashboard')
+def watchlist_dashboard():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 查询当前用户所有 watchlist 股票（带 watchlistname 分组）
+    cursor.execute("""
+        SELECT w.watchlistname, w.symbol, s.company_name, s.current_price, w.quantity
+        FROM watchlist w
+        JOIN stock s ON w.symbol = s.symbol
+        WHERE w.owner = %s
+    """, (session['user_id'],))
+
+    raw_watchlist = cursor.fetchall()
+
+    # group by watchlistname
+    watchlist_grouped = {}
+    for watchlistname, symbol, company, price, quantity in raw_watchlist:
+        if watchlistname not in watchlist_grouped:
+            watchlist_grouped[watchlistname] = []
+        watchlist_grouped[watchlistname].append((symbol, company, price, quantity))
+
+    # 获取每只股票的时间序列数据（2013-01-01 至 2018-02-07）
+    history_data = {}
+    for stocks in watchlist_grouped.values():
+        for symbol, _, _, _ in stocks:
+            if symbol not in history_data:  # 防止重复查同一股票
+                cursor.execute("""
+                    SELECT date, close_price FROM stockhistory
+                    WHERE symbol = %s AND date BETWEEN '2013-01-01' AND '2018-02-07'
+                    ORDER BY date;
+                """, (symbol,))
+                rows = cursor.fetchall()
+                history_data[symbol] = [
+                    {'date': row[0].strftime('%Y-%m-%d'), 'price': row[1]}
+                    for row in rows
+                ]
+
+    cursor.close()
+    conn.close()
+
+    return render_template("watchlist_dashboard.html",
+                           watchlist_grouped=watchlist_grouped,
+                           history_data=history_data)
+
+
 
 
 # 📌 用户登出

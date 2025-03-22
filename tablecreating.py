@@ -61,7 +61,7 @@ cursor.execute("""
         symbol VARCHAR(10) REFERENCES stock(symbol),
         watchlistname VARCHAR(100),
         owner INT REFERENCES users(id),
-        PRIMARY KEY (watchlistname, owner)
+        quantity INTEGER DEFAULT 1,
     );
 """)
 

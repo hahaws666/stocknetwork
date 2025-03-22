@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>📈 Watchlist Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        .container { width: 80%; margin: auto; }
+        .watchlist-section {
+            margin-top: 40px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ccc;
+        }
+        canvas {
+            margin-top: 20px;
+            max-width: 100%;
+            height: 300px;
+        }
+        h2 {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 我的 Watchlist</h1>
+    <a href="/welcome">← 返回首页</a> | <a href="/logout">登出</a>
+
+    {% for watchlist_name, stocks in watchlist_grouped.items() %}
+    <div class="watchlist-section">
+        <h2>📌 {{ watchlist_name }}</h2>
+
+        <canvas id="lineChart_{{ watchlist_name }}"></canvas>
+
+        <table>
+            <tr>
+                <th>股票符号</th>
+                <th>公司名称</th>
+                <th>当前价格</th>
+                <th>数量</th> <!-- ✅ 新增列 -->
+            </tr>
+            {% for stock in stocks %}
+            <tr>
+                <td>{{ stock[0] }}</td>
+                <td>{{ stock[1] or "N/A" }}</td>
+                <td>${{ "%.2f"|format(stock[2]) }}</td>
+                <td>{{ stock[3] }}</td> <!-- ✅ 显示数量 -->
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+    const historyData = {{ history_data | tojson }};
+
+    {% for watchlist_name, stocks in watchlist_grouped.items() %}
+    const ctx{{ watchlist_name }} = document.getElementById("lineChart_{{ watchlist_name }}").getContext('2d');
+
+    const datasets{{ watchlist_name }} = [
+        {% for stock in stocks %}
+        {
+            label: "{{ stock[0] }}",
+            data: historyData["{{ stock[0] }}"] ? historyData["{{ stock[0] }}"].map(point => ({
+                x: new Date(point.date),
+                y: point.price
+            })) : [],
+            borderWidth: 2,
+            fill: false,
+            tension: 0.3,
+            borderColor: '#' + Math.floor(Math.random()*16777215).toString(16)
+        },
+        {% endfor %}
+    ];
+
+    new Chart(ctx{{ watchlist_name }}, {
+        type: 'line',
+        data: {
+            datasets: datasets{{ watchlist_name }}
+        },
+        options: {
+            responsive: true,
+            parsing: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: '📈 股票表现（2013 - 2018）'
+                },
+                legend: {
+                    position: 'bottom'
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        parser: 'yyyy-MM-dd',
+                        unit: 'month',
+                        tooltipFormat: 'yyyy-MM-dd',
+                        displayFormats: {
+                            month: 'MMM yyyy',
+                            day: 'yyyy-MM-dd'
+                        }
+                    },
+                    min: '2013-01-01',
+                    max: '2018-02-07',
+                    title: {
+                        display: true,
+                        text: '时间'
+                    },
+                    ticks: {
+                        autoSkip: false,
+                        maxTicksLimit: 12
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: '价格 ($)'
+                    },
+                    beginAtZero: false
+                }
+            }
+        }
+    });
+    {% endfor %}
+</script>
+
+</body>
+</html>
