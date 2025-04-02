@@ -1,24 +1,24 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📊 我的投资组合 & 自选股</title>
+    <title>📊 My Portfolio & Watchlist</title>
 </head>
 <body>
-    <h1>欢迎回来, {{ current_user }}</h1>
-    <a href="/welcome">← 返回首页</a> | <a href="/logout">登出</a>
+    <h1>Welcome back, {{ current_user }}</h1>
+    <a href="/welcome">← Back to Home</a> | <a href="/logout">Log Out</a>
 
     <hr>
 
-    <h2>📈 我的 Portfolio（投资组合）</h2>
+    <h2>📈 My Portfolio</h2>
     {% if portfolio %}
     <table border="1" cellpadding="5">
         <tr>
-            <th>股票符号</th>
-            <th>公司名称</th>
-            <th>持仓数量</th>
-            <th>买入价格</th>
-            <th>添加时间</th>
+            <th>Stock Symbol</th>
+            <th>Company Name</th>
+            <th>Quantity Held</th>
+            <th>Buy Price</th>
+            <th>Added Time</th>
         </tr>
         {% for row in portfolio %}
         <tr>
@@ -31,18 +31,18 @@
         {% endfor %}
     </table>
     {% else %}
-        <p>你还没有任何投资组合。</p>
+        <p>You have no portfolio yet.</p>
     {% endif %}
 
     <hr>
 
-    <h2>⭐ 我的 Watchlist（自选股）</h2>
+    <h2>⭐ My Watchlist</h2>
     {% if watchlist %}
     <table border="1" cellpadding="5">
         <tr>
-            <th>股票符号</th>
-            <th>公司名称</th>
-            <th>自选列表名称</th>
+            <th>Stock Symbol</th>
+            <th>Company Name</th>
+            <th>Watchlist Name</th>
         </tr>
         {% for row in watchlist %}
         <tr>
@@ -53,7 +53,7 @@
         {% endfor %}
     </table>
     {% else %}
-        <p>你还没有添加自选股。</p>
+        <p>You have not added any stocks to your watchlist.</p>
     {% endif %}
 </body>
 </html>

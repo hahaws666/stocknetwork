@@ -5,7 +5,7 @@ import pandas as pd
 conn = psycopg2.connect(
     dbname="stock_network",
     user="postgres",
-    password="yourpassword",  # 请替换为你的 PostgreSQL 密码
+    password="postgres",  # 请替换为你的 PostgreSQL 密码
     host="localhost",
     port="5432"
 )
@@ -41,6 +41,10 @@ for _, row in df.iterrows():
         row['timestamp'], row['code'], row['open'],
         row['close'], row['high'], row['low'], row['volume']
     ))
+    i = 1
+    if (i % 100 == 0):
+        print(i)
+    i += 1
 
 # 提交更改并关闭连接
 conn.commit()

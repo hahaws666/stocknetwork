@@ -10,93 +10,12 @@ def get_db_connection():
     return psycopg2.connect(
         dbname="stock_network",
         user="postgres",
-        password="",  # 请替换为你的 PostgreSQL 密码
+        password="postgres",  # 请替换为你的 PostgreSQL 密码
         host="localhost",
         port="5432"
     )
 
 bcrypt = Bcrypt(app)
-
-# 📌 创建数据库表
-def create_tables():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # 创建 users 表
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(100) UNIQUE NOT NULL,
-        email VARCHAR(100) UNIQUE NOT NULL,
-        password VARCHAR(200) NOT NULL
-    );
-    """)
-
-    # cursor.execute("DROP TABLE IF EXISTS friends CASCADE;")
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS friends (
-           user1_id INT NOT NULL,
-            user2_id INT NOT NULL,
-            status INT NOT NULL CHECK (status IN (-1, 0, 1)),  -- -1: 拒绝, 0: 待处理, 1: 好友
-            timestamp TIMESTAMP DEFAULT NOW(),
-            PRIMARY KEY (user1_id, user2_id),
-            FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE
-        );
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS stocklist_data (
-        owner INT NOT NULL,
-        name TEXT NOT NULL,
-        visible INT NOT NULL DEFAULT 0 CHECK (visible IN (0, 1, 2)),  -- 0: private, 1: shared, 2: public
-        covariance DOUBLE PRECISION,
-        beta DOUBLE PRECISION,
-        PRIMARY KEY (owner, name),
-        FOREIGN KEY (owner) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    """)
-
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS reviews (
-            user_id INT NOT NULL,
-            stocklist_owner INT NOT NULL,
-            stocklist_name TEXT NOT NULL,
-            content TEXT CHECK (char_length(content) <= 4000),
-            timestamp TIMESTAMP DEFAULT NOW(),
-            PRIMARY KEY (user_id, stocklist_owner, stocklist_name),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (stocklist_owner, stocklist_name) REFERENCES stocklist_data(owner, name) ON DELETE CASCADE
-        );
-
-    """)
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS comments (
-        id SERIAL PRIMARY KEY,
-        user_id INT NOT NULL,
-        watchlist_owner INT NOT NULL,
-        watchlist_name TEXT NOT NULL,
-        timestamp TIMESTAMP DEFAULT NOW(),
-        content TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (watchlist_owner, watchlist_name) REFERENCES stocklist_data(owner, name) ON DELETE CASCADE
-    );
-
-    """)
-
-
-
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-create_tables()
-
 
 # 📌 主页（"/"）
 @app.route('/')
@@ -230,14 +149,14 @@ def welcome():
 @app.route('/send_friend_request', methods=['POST'])
 def send_friend_request():
     if 'user_id' not in session:
-        return jsonify({"message": "请先登录"}), 401
+        return jsonify({"message": "Please log in first"}), 401
 
     data = request.json
     user1_id = session['user_id']
     user2_id = data.get("user2_id")
 
     if user1_id == user2_id:
-        return jsonify({"message": "不能添加自己为好友"}), 400
+        return jsonify({"message": "Cannot add myself as a friend"}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -256,11 +175,11 @@ def send_friend_request():
     if existing:
         status, ts = existing
         if status == 0:
-            return jsonify({"message": "请求已发送"}), 400
+            return jsonify({"message": "Request sent"}), 400
         elif status == 1:
-            return jsonify({"message": "你们已经是好友"}), 400
+            return jsonify({"message": "You are already friends"}), 400
         elif status == -1 and (now - ts).total_seconds() < 300:
-            return jsonify({"message": "冷却中，5分钟后再发送"}), 400
+            return jsonify({"message": "Cooling down, please send again in 5 minutes"}), 400
         else:
             # 超过冷却时间后，更新为新的请求
             cursor.execute("""
@@ -279,13 +198,13 @@ def send_friend_request():
     cursor.close()
     conn.close()
 
-    return jsonify({"message": "好友请求已发送"}), 201
+    return jsonify({"message": "Friend request sent"}), 201
 
 
 @app.route('/respond_friend_request', methods=['POST'])
 def respond_friend_request():
     if 'user_id' not in session:
-        return jsonify({"message": "请先登录"}), 401
+        return jsonify({"message": "Please log in first"}), 401
 
     data = request.json
     user1_id = data.get("user1_id")
@@ -310,12 +229,12 @@ def respond_friend_request():
     cursor.close()
     conn.close()
 
-    return jsonify({"message": f"好友请求已{action}"}), 200
+    return jsonify({"message": f"Friend request has been{action}"}), 200
 
 @app.route('/delete_friend', methods=['POST'])
 def delete_friend():
     if 'user_id' not in session:
-        return jsonify({"message": "请先登录"}), 401
+        return jsonify({"message": "Please log in first"}), 401
 
     data = request.get_json()
     user_id = session['user_id']
@@ -344,7 +263,7 @@ def delete_friend():
     cursor.close()
     conn.close()
 
-    return jsonify({"message": "好友已删除"})
+    return jsonify({"message": "Friend has been deleted"})
 
 
 
@@ -375,7 +294,7 @@ def search_stock():
 @app.route('/add_to_watchlist', methods=['POST'])
 def add_to_watchlist():
     if 'user_id' not in session:
-        return jsonify({'message': '请先登录'}), 401
+        return jsonify({'message': 'Please log in first'}), 401
 
     data = request.get_json()
     symbol = data.get('symbol')
@@ -404,10 +323,10 @@ def add_to_watchlist():
         """, (symbol, watchlistname, user_id, quantity))
 
         conn.commit()
-        message = f"✅ 已添加 {symbol} x{quantity} 到 {watchlistname}"
+        message = f"✅ Added {symbol} x{quantity} to {watchlistname}"
     except Exception as e:
         conn.rollback()
-        message = f"❌ 添加失败: {str(e)}"
+        message = f"❌ Add failed: {str(e)}"
     finally:
         cursor.close()
         conn.close()
@@ -419,7 +338,7 @@ def add_to_watchlist():
 @app.route('/add_to_portfolio', methods=['POST'])
 def add_to_portfolio():
     if 'user_id' not in session:
-        return jsonify({'message': '请先登录'}), 401
+        return jsonify({'message': 'Please log in first'}), 401
 
     data = request.json
     symbol = data.get('symbol')
@@ -438,12 +357,12 @@ def add_to_portfolio():
         conn.commit()
     except Exception as e:
         conn.rollback()
-        return jsonify({'message': f'添加失败: {str(e)}'}), 500
+        return jsonify({'message': f'Add failed: {str(e)}'}), 500
     finally:
         cursor.close()
         conn.close()
 
-    return jsonify({'message': f'{symbol} 已加入 Portfolio，数量：{qty}'})
+    return jsonify({'message': f'{symbol} Added to Portfolio, quantity: {qty}'})
 
 
 
@@ -565,7 +484,7 @@ def view_watchlist(owner_id, watchlist_name):
     if not result:
         cursor.close()
         conn.close()
-        return "❌ Stocklist 不存在", 404
+        return "❌ Stocklist does not exist", 404
 
     visible = result[0]
 
@@ -581,7 +500,7 @@ def view_watchlist(owner_id, watchlist_name):
         if not has_commented:
             cursor.close()
             conn.close()
-            return "❌ 该 stocklist 未公开，且你不是评论者或拥有者", 403
+            return "❌ This stocklist is not public and you are not the reviewer or owner", 403
 
     # ✅ 获取所有评论（含评论 ID, user_id, username, content, timestamp）
     cursor.execute("""
@@ -672,10 +591,10 @@ def delete_comment():
     comment = cursor.fetchone()
 
     if not comment:
-        return "评论不存在", 404
+        return "Comment does not exist", 404
 
     if user_id != comment[0] and user_id != comment[1]:
-        return "无权限删除该评论", 403
+        return "No permission to delete this comment", 403
 
     cursor.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
     conn.commit()
@@ -689,7 +608,7 @@ def delete_comment():
 @app.route('/toggle_visibility', methods=['POST'])
 def toggle_visibility():
     if 'user_id' not in session:
-        return jsonify({'message': '未登录'}), 401
+        return jsonify({'message': 'Not logged in'}), 401
 
     data = request.json
     watchlist_name = data.get('watchlist_name')
@@ -698,7 +617,7 @@ def toggle_visibility():
 
     # 校验 visible 值是否合法
     if new_status not in [0, 1, 2]:
-        return jsonify({'message': '无效的可见性值'}), 400
+        return jsonify({'message': 'Invalid visibility value'}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -714,7 +633,7 @@ def toggle_visibility():
     cursor.close()
     conn.close()
 
-    return jsonify({'message': '可见性更新成功 ✅'})
+    return jsonify({'message': 'Visibility updated successfully ✅'})
 
 
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>📈 Watchlist Dashboard</title>
@@ -40,19 +40,19 @@
 </head>
 <body>
 <div class="container">
-    <h1>📊 我的 Watchlist</h1>
-    <a href="/welcome">← 返回首页</a> | <a href="/logout">登出</a>
+    <h1>📊 My Watchlist</h1>
+    <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
 
     {% for watchlist_name, stocks in watchlist_grouped.items() %}
     <div class="watchlist-section">
         <h2>
             📌 {{ watchlist_name }}
             <span class="visibility-toggle">
-                可见性：
+                Visibility:
                 <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
-                    <option value="0" {% if visibility_data[watchlist_name] == 0 %}selected{% endif %}>私有</option>
-                    <option value="1" {% if visibility_data[watchlist_name] == 1 %}selected{% endif %}>好友共享</option>
-                    <option value="2" {% if visibility_data[watchlist_name] == 2 %}selected{% endif %}>公开</option>
+                    <option value="0" {% if visibility_data[watchlist_name] == 0 %}selected{% endif %}>Private</option>
+                    <option value="1" {% if visibility_data[watchlist_name] == 1 %}selected{% endif %}>Shared with Friends</option>
+                    <option value="2" {% if visibility_data[watchlist_name] == 2 %}selected{% endif %}>Public</option>
                 </select>
             </span>
         </h2>
@@ -61,10 +61,10 @@
 
         <table>
             <tr>
-                <th>股票符号</th>
-                <th>公司名称</th>
-                <th>当前价格</th>
-                <th>数量</th>
+                <th>Stock Symbol</th>
+                <th>Company Name</th>
+                <th>Current Price</th>
+                <th>Quantity</th>
             </tr>
             {% for stock in stocks %}
             <tr>
@@ -112,7 +112,7 @@
             plugins: {
                 title: {
                     display: true,
-                    text: '📈 股票表现（2013 - 2018）'
+                    text: '📈 Stock Performance (2013 - 2018)'
                 },
                 legend: {
                     position: 'bottom'
@@ -134,7 +134,7 @@
                     max: '2018-02-07',
                     title: {
                         display: true,
-                        text: '时间'
+                        text: 'Time'
                     },
                     ticks: {
                         autoSkip: false,
@@ -144,7 +144,7 @@
                 y: {
                     title: {
                         display: true,
-                        text: '价格 ($)'
+                        text: 'Price ($)'
                     },
                     beginAtZero: false
                 }
@@ -161,7 +161,7 @@
         })
         .then(response => response.json())
         .then(data => alert(data.message))
-        .catch(err => console.error("切换失败", err));
+        .catch(err => console.error("Toggle failed", err));
     }
 </script>
 </body>

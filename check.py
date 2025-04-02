@@ -1,11 +1,11 @@
 import psycopg2
 
 # 连接 PostgreSQL 数据库
-conn = psycopg2.connect("dbname=stock_network user=postgres password=")
+conn = psycopg2.connect("dbname=stock_network user=postgres password=postgres")
 cursor = conn.cursor()
 
 # 查询所有用户
-cursor.execute('SELECT * FROM "user";')
+cursor.execute('SELECT * FROM "users";')
 users = cursor.fetchall()
 
 # 打印用户数据

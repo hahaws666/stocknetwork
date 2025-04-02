@@ -1,42 +1,42 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>评论区：{{ watchlist_name }} </title>
+    <title>Comments: {{ watchlist_name }} </title>
 </head>
 <body>
-    <h1>📋 {{ watchlist_name }} 的评论 </h1>
-    <a href="/welcome">← 返回主页</a>
+    <h1>📋 Comments for {{ watchlist_name }} </h1>
+    <a href="/welcome">← Back to Home</a>
     <hr>
 
-    <!-- 显示评论 -->
+    <!-- Display Comments -->
     {% for comment in comments %}
         <div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
             <strong>{{ comment[2] }}</strong> 🕒 {{ comment[4] }}<br>
             {{ comment[3] }}
             {% if comment[1] == current_user_id or is_creator %}
                 <form action="{{ url_for('delete_comment', comment_id=comment[0]) }}" method="post" style="display:inline;">
-                    <button type="submit" style="color:red;">删除</button>
+                    <button type="submit" style="color:red;">Delete</button>
                 </form>
             {% endif %}
         </div>
     {% else %}
-        <p>暂无评论。</p>
+        <p>No comments yet.</p>
     {% endfor %}
 
     <hr>
-    <!-- 添加或更新评论 -->
-        <h3>{{ my_comment and "✏️ 编辑你的评论" or "📝 发表你的评论" }}</h3>
-        <form method="post" action="{{ url_for('submit_comment') }}">
-            <input type="hidden" name="owner_id" value="{{ owner_id }}">
-            <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
-            <textarea name="text" rows="4" cols="60" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
-            <button type="submit">提交</button>
-        </form>
+    <!-- Add or Edit Comment -->
+    <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
+    <form method="post" action="{{ url_for('submit_comment') }}">
+        <input type="hidden" name="owner_id" value="{{ owner_id }}">
+        <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
+        <textarea name="text" rows="4" cols="60" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
+        <button type="submit">Submit</button>
+    </form>
 </body>
 <script>
     const commentsData = {{ comments | tojson }};
-    console.log("📝 当前评论数据：", commentsData);
+    console.log("📝 Current comments data:", commentsData);
 </script>
 
 </html>

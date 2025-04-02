@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Stocklist Performance</title>
@@ -36,9 +36,9 @@
 </head>
 <body>
 
-  <a href="/welcome" class="back-button">← 返回</a>
+  <a href="/welcome" class="back-button">← Back</a>
 
-  <h2>📈 Stocklist 表现</h2>
+  <h2>📈 Stocklist Performance</h2>
   <canvas id="performanceChart" width="900" height="400"></canvas>
 
   <script>
@@ -66,7 +66,7 @@
         plugins: {
           title: {
             display: true,
-            text: '📈 股票价格走势（2013 - 2018）'
+            text: '📈 Stock Price Trends (2013 - 2018)'
           },
           legend: {
             position: 'bottom'
@@ -86,13 +86,13 @@
             },
             title: {
               display: true,
-              text: '时间'
+              text: 'Time'
             }
           },
           y: {
             title: {
               display: true,
-              text: '价格 ($)'
+              text: 'Price ($)'
             },
             beginAtZero: false
           }
