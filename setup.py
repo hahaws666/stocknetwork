@@ -11,9 +11,9 @@ def run_script(script_name):
 def main():
     # Run the scripts in the desired order
     print("Starting setup process...")
-    run_script("tablecreating.py")
-    run_script("iteminserting.py")
-    run_script("gettingcurrentprice.py")
+    run_script("setup/tablecreating.py")
+    run_script("setup/iteminserting.py")
+    run_script("setup/gettingcurrentprice.py")
     print("Setup process completed.")
 
 if __name__ == "__main__":

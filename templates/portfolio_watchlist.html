@@ -10,50 +10,62 @@
 
     <hr>
 
-    <h2>📈 My Portfolio</h2>
-    {% if portfolio %}
-    <table border="1" cellpadding="5">
-        <tr>
-            <th>Stock Symbol</th>
-            <th>Company Name</th>
-            <th>Quantity Held</th>
-            <th>Buy Price</th>
-            <th>Added Time</th>
-        </tr>
-        {% for row in portfolio %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] or "N/A" }}</td>
-            <td>{{ row[2] }}</td>
-            <td>{{ row[3] }}</td>
-            <td>{{ row[4] }}</td>
-        </tr>
+    <h2>📈 My Portfolios</h2>
+    {% if portfolios %}
+        {% for pname, cashbalance in portfolios %}
+            <h3>Portfolio: {{ pname }} (💰 {{ cashbalance }})</h3>
+            {% if portfolio_holdings[pname] %}
+                <table border="1" cellpadding="5">
+                    <tr>
+                        <th>Stock Symbol</th>
+                        <th>Company Name</th>
+                        <th>Quantity Held</th>
+                        <th>Buy Price</th>
+                        <th>Added Time</th>
+                    </tr>
+                    {% for row in portfolio_holdings[pname] %}
+                    <tr>
+                        <td>{{ row[0] }}</td>
+                        <td>{{ row[1] or "N/A" }}</td>
+                        <td>{{ row[2] }}</td>
+                        <td>{{ row[3] }}</td>
+                        <td>{{ row[4] }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <p>This portfolio is empty.</p>
+            {% endif %}
         {% endfor %}
-    </table>
     {% else %}
-        <p>You have no portfolio yet.</p>
+        <p>You have no portfolios yet.</p>
     {% endif %}
 
     <hr>
 
-    <h2>⭐ My Watchlist</h2>
-    {% if watchlist %}
-    <table border="1" cellpadding="5">
-        <tr>
-            <th>Stock Symbol</th>
-            <th>Company Name</th>
-            <th>Watchlist Name</th>
-        </tr>
-        {% for row in watchlist %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] or "N/A" }}</td>
-            <td>{{ row[2] }}</td>
-        </tr>
+    <h2>⭐ My Watchlists</h2>
+    {% if watchlists %}
+        {% for sname in watchlists %}
+            <h3>Watchlist: {{ sname }}</h3>
+            {% if watchlist_holdings[sname] %}
+                <table border="1" cellpadding="5">
+                    <tr>
+                        <th>Stock Symbol</th>
+                        <th>Company Name</th>
+                    </tr>
+                    {% for row in watchlist_holdings[sname] %}
+                    <tr>
+                        <td>{{ row[0] }}</td>
+                        <td>{{ row[1] or "N/A" }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <p>This watchlist is empty.</p>
+            {% endif %}
         {% endfor %}
-    </table>
     {% else %}
-        <p>You have not added any stocks to your watchlist.</p>
+        <p>You have not created any watchlists yet.</p>
     {% endif %}
 </body>
 </html>

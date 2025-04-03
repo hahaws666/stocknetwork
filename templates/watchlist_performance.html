@@ -32,6 +32,11 @@
     .back-button:hover {
       background-color: #ddd;
     }
+    .no-data {
+      text-align: center;
+      color: #888;
+      font-size: 18px;
+    }
   </style>
 </head>
 <body>
@@ -39,13 +44,20 @@
   <a href="/welcome" class="back-button">← Back</a>
 
   <h2>📈 Stocklist Performance</h2>
+  
   <canvas id="performanceChart" width="900" height="400"></canvas>
+  <p id="noDataMessage" class="no-data" style="display: none;">No data available</p>
 
   <script>
     const historyData = {{ history_data | tojson }};
     const ctx = document.getElementById("performanceChart").getContext("2d");
 
-    const datasets = Object.entries(historyData).map(([symbol, points]) => ({
+    const colorPalette = [
+      '#FF5733', '#33FF57', '#5733FF', '#F0C808', '#08C8F0', 
+      '#E91E63', '#00BCD4', '#FF9800', '#8BC34A', '#9C27B0'
+    ];
+
+    const datasets = Object.entries(historyData).map(([symbol, points], index) => ({
       label: symbol,
       data: points.map(p => ({
         x: new Date(p.date),
@@ -54,51 +66,60 @@
       borderWidth: 2,
       fill: false,
       tension: 0.3,
-      borderColor: '#' + Math.floor(Math.random() * 16777215).toString(16)
+      borderColor: colorPalette[index % colorPalette.length]
     }));
 
-    new Chart(ctx, {
-      type: 'line',
-      data: { datasets },
-      options: {
-        responsive: true,
-        parsing: false,
-        plugins: {
-          title: {
-            display: true,
-            text: '📈 Stock Price Trends (2013 - 2018)'
-          },
-          legend: {
-            position: 'bottom'
-          }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            min: '2013-01-01',
-            max: '2018-02-07',
-            time: {
-              unit: 'month',
-              displayFormats: {
-                month: 'yyyy-MM'
-              },
-              tooltipFormat: 'yyyy-MM-dd'
-            },
+    if (datasets.length === 0) {
+      document.getElementById("performanceChart").style.display = "none";
+      document.getElementById("noDataMessage").style.display = "block";
+    } else {
+      const minDate = Math.min(...datasets.flatMap(d => d.data.map(p => p.x.getTime())));
+      const maxDate = Math.max(...datasets.flatMap(d => d.data.map(p => p.x.getTime())));
+
+      new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          parsing: false,
+          plugins: {
             title: {
               display: true,
-              text: 'Time'
+              text: '📈 Stock Price Trends'
+            },
+            legend: {
+              position: 'bottom'
             }
           },
-          y: {
-            title: {
-              display: true,
-              text: 'Price ($)'
+          scales: {
+            x: {
+              type: 'time',
+              min: new Date(minDate),
+              max: new Date(maxDate),
+              time: {
+                unit: 'month',
+                displayFormats: {
+                  month: 'yyyy-MM'
+                },
+                tooltipFormat: 'yyyy-MM-dd'
+              },
+              title: {
+                display: true,
+                text: 'Time'
+              }
             },
-            beginAtZero: false
+            y: {
+              title: {
+                display: true,
+                text: 'Price ($)'
+              },
+              beginAtZero: false
+            }
           }
         }
-      }
-    });
+      });
+    }
   </script>
+
 </body>
 </html>

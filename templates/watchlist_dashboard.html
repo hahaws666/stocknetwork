@@ -43,49 +43,49 @@
     <h1>📊 My Watchlist</h1>
     <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
 
-    {% for watchlist_name, stocks in watchlist_grouped.items() %}
     <div class="watchlist-section">
         <h2>
             📌 {{ watchlist_name }}
             <span class="visibility-toggle">
                 Visibility:
                 <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
-                    <option value="0" {% if visibility_data[watchlist_name] == 0 %}selected{% endif %}>Private</option>
-                    <option value="1" {% if visibility_data[watchlist_name] == 1 %}selected{% endif %}>Shared with Friends</option>
-                    <option value="2" {% if visibility_data[watchlist_name] == 2 %}selected{% endif %}>Public</option>
+                    <option value="0" {% if visibility_data == 0 %}selected{% endif %}>Private</option>
+                    <option value="1" {% if visibility_data == 1 %}selected{% endif %}>Shared with Friends</option>
+                    <option value="2" {% if visibility_data == 2 %}selected{% endif %}>Public</option>
                 </select>
             </span>
         </h2>
-
+    
         <canvas id="lineChart_{{ watchlist_name }}"></canvas>
-
+    
         <table>
             <tr>
                 <th>Stock Symbol</th>
                 <th>Company Name</th>
                 <th>Current Price</th>
-                <th>Quantity</th>
             </tr>
             {% for stock in stocks %}
             <tr>
                 <td>{{ stock[0] }}</td>
                 <td>{{ stock[1] or "N/A" }}</td>
                 <td>${{ "%.2f"|format(stock[2]) }}</td>
-                <td>{{ stock[3] }}</td>
             </tr>
             {% endfor %}
         </table>
-    </div>
-    {% endfor %}
+    </div>    
 </div>
 
 <script>
     const historyData = {{ history_data | tojson }};
 
-    {% for watchlist_name, stocks in watchlist_grouped.items() %}
-    const ctx{{ watchlist_name }} = document.getElementById("lineChart_{{ watchlist_name }}").getContext('2d');
+    const colorPalette = [
+        '#FF5733', '#33FF57', '#5733FF', '#F0C808', '#08C8F0', 
+        '#E91E63', '#00BCD4', '#FF9800', '#8BC34A', '#9C27B0'
+    ];
 
-    const datasets{{ watchlist_name }} = [
+    const ctx = document.getElementById("lineChart_{{ watchlist_name }}").getContext('2d');
+
+    const datasets = [
         {% for stock in stocks %}
         {
             label: "{{ stock[0] }}",
@@ -96,23 +96,21 @@
             borderWidth: 2,
             fill: false,
             tension: 0.3,
-            borderColor: '#' + Math.floor(Math.random() * 16777215).toString(16)
+            borderColor: colorPalette[{{ loop.index0 }} % colorPalette.length]
         },
         {% endfor %}
     ];
 
-    new Chart(ctx{{ watchlist_name }}, {
+    new Chart(ctx, {
         type: 'line',
-        data: {
-            datasets: datasets{{ watchlist_name }}
-        },
+        data: { datasets },
         options: {
             responsive: true,
             parsing: false,
             plugins: {
                 title: {
                     display: true,
-                    text: '📈 Stock Performance (2013 - 2018)'
+                    text: '📈 Stock Performance'
                 },
                 legend: {
                     position: 'bottom'
@@ -122,7 +120,6 @@
                 x: {
                     type: 'time',
                     time: {
-                        parser: 'yyyy-MM-dd',
                         unit: 'month',
                         tooltipFormat: 'yyyy-MM-dd',
                         displayFormats: {
@@ -130,15 +127,9 @@
                             day: 'yyyy-MM-dd'
                         }
                     },
-                    min: '2013-01-01',
-                    max: '2018-02-07',
                     title: {
                         display: true,
                         text: 'Time'
-                    },
-                    ticks: {
-                        autoSkip: false,
-                        maxTicksLimit: 12
                     }
                 },
                 y: {
@@ -151,7 +142,6 @@
             }
         }
     });
-    {% endfor %}
 
     function toggleVisibility(watchlistName, visible) {
         fetch("/toggle_visibility", {

@@ -135,4 +135,4 @@ conn.commit()
 cursor.close()
 conn.close()
 
-print("✅ Table Created")
+print("[DONE] Table Created")

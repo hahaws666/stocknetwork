@@ -2,21 +2,62 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Comments: {{ watchlist_name }} </title>
+    <title>Comments: {{ watchlist_name }}</title>
+    <script>
+        function confirmDelete(commentId) {
+            if (confirm("Are you sure you want to delete this comment?")) {
+                document.getElementById("delete-form-" + commentId).submit();
+            }
+        }
+
+        function formatTimestamps() {
+            document.querySelectorAll('.timestamp').forEach(span => {
+                const date = new Date(span.dataset.time);
+                span.innerText = new Intl.DateTimeFormat('en-US', { 
+                    dateStyle: 'medium', timeStyle: 'short' 
+                }).format(date);
+            });
+        }
+
+        window.onload = formatTimestamps;
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .comment-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+        .delete-button {
+            color: red;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+        textarea {
+            width: 100%;
+            max-width: 600px;
+        }
+    </style>
 </head>
 <body>
-    <h1>📋 Comments for {{ watchlist_name }} </h1>
+    <h1>📋 Comments for {{ watchlist_name }}</h1>
     <a href="/welcome">← Back to Home</a>
     <hr>
 
     <!-- Display Comments -->
     {% for comment in comments %}
-        <div style="border:1px solid #ccc; padding:10px; margin-bottom:10px;">
-            <strong>{{ comment[2] }}</strong> 🕒 {{ comment[4] }}<br>
+        <div class="comment-box">
+            <strong>{{ comment[2] }}</strong> 🕒 <span class="timestamp" data-time="{{ comment[4] }}"></span><br>
             {{ comment[3] }}
             {% if comment[1] == current_user_id or is_creator %}
-                <form action="{{ url_for('delete_comment', comment_id=comment[0]) }}" method="post" style="display:inline;">
-                    <button type="submit" style="color:red;">Delete</button>
+                <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment', comment_id=comment[0]) }}" method="post" style="display:inline;">
+                    <button type="button" class="delete-button" onclick="confirmDelete({{ comment[0] }})">❌ Delete</button>
                 </form>
             {% endif %}
         </div>
@@ -27,16 +68,17 @@
     <hr>
     <!-- Add or Edit Comment -->
     <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
-    <form method="post" action="{{ url_for('submit_comment') }}">
+    <form method="post" action="{{ url_for('submit_comment') }}" onsubmit="clearTextArea()">
         <input type="hidden" name="owner_id" value="{{ owner_id }}">
         <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
-        <textarea name="text" rows="4" cols="60" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
+        <textarea id="commentText" name="text" rows="4" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
         <button type="submit">Submit</button>
     </form>
-</body>
-<script>
-    const commentsData = {{ comments | tojson }};
-    console.log("📝 Current comments data:", commentsData);
-</script>
 
+    <script>
+        function clearTextArea() {
+            setTimeout(() => document.getElementById("commentText").value = "", 100);
+        }
+    </script>
+</body>
 </html>

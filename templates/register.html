@@ -6,15 +6,20 @@
 </head>
 <body>
     <h1>User Registration</h1>
-    <form method="POST">
+    <form method="POST" action="{{ url_for('register') }}">
         <label>Username:</label>
         <input type="text" name="username" required><br>
-        <!-- <label>Email:</label>
-        <input type="email" name="email" required><br> -->
+        
         <label>Password:</label>
         <input type="password" name="password" required><br>
+
         <button type="submit">Register</button>
     </form>
-    <a href="/login">Already have an account? Login</a>
+    
+    <a href="{{ url_for('login') }}">Already have an account? Login</a>
+
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
 </body>
 </html>
