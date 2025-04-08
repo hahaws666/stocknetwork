@@ -163,7 +163,6 @@ def welcome():
         friends=friends,
         public_stocklists=[(row[0], row[1]) for row in public_stocklists],  # mock (owner_name, list_name)
         current_user=current_username,
-        current_user_id=current_username,
         portfolios=portfolios,
         watchlists=watchlists
     )
@@ -333,81 +332,84 @@ def view_stock_detail(symbol):
     return render_template("stock_detail.html", symbol=symbol, history=history)
 
 
-@app.route("/add_to_watchlist", methods=["POST"])
-def add_to_watchlist():
-    data = request.get_json()
-    symbol = data["symbol"]
-    sname = data["watchlistname"]
-    qty = int(data.get("quantity", 1))  # fallback to 1 if not sent
-    username = session.get("username")
+# @app.route("/add_to_watchlist", methods=["POST"])
+# def add_to_watchlist():
+#     data = request.get_json()
+#     symbol = data["symbol"]
+#     sname = data["watchlistname"]
+#     qty = int(data.get("quantity", 1))  # fallback to 1 if not sent
+#     username = session.get("username")
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
 
-    # Create watchlist if doesn't exist
-    cursor.execute("""
-        INSERT INTO stocklist_data (username, sname)
-        SELECT %s, %s
-        WHERE NOT EXISTS (
-            SELECT 1 FROM stocklist_data WHERE username = %s AND sname = %s
-        )
-    """, (username, sname, username, sname))
+#     # Create watchlist if doesn't exist
+#     cursor.execute("""
+#         INSERT INTO stocklist_data (username, sname)
+#         SELECT %s, %s
+#         WHERE NOT EXISTS (
+#             SELECT 1 FROM stocklist_data WHERE username = %s AND sname = %s
+#         )
+#     """, (username, sname, username, sname))
 
-    # Add stock to watchlist
-    cursor.execute("""
-        INSERT INTO stocklistholding (username, sname, symbol, qty)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (sname, username, symbol) DO UPDATE SET qty = stocklistholding.qty + EXCLUDED.qty
-    """, (username, sname, symbol, qty))
+#     # Add stock to watchlist
+#     cursor.execute("""
+#         INSERT INTO stocklistholding (username, sname, symbol, qty)
+#         VALUES (%s, %s, %s, %s)
+#         ON CONFLICT (sname, username, symbol) DO UPDATE SET qty = stocklistholding.qty + EXCLUDED.qty
+#     """, (username, sname, symbol, qty))
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+#     conn.commit()
+#     cursor.close()
+#     conn.close()
 
-    return jsonify({"message": f"Added {symbol} (qty: {qty}) to {sname}."})
-
-
-@app.route("/add_to_portfolio", methods=["POST"])
-def add_to_portfolio():
-    data = request.get_json()
-    symbol = data["symbol"]
-    pname = data["pname"]
-    qty = int(data["qty"])
-    username = session.get("username")
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Ensure portfolio exists
-    cursor.execute("""
-        INSERT INTO portfolio (username, pname, cashbalance)
-        SELECT %s, %s, 0
-        WHERE NOT EXISTS (
-            SELECT 1 FROM portfolio WHERE username = %s AND pname = %s
-        );
-    """, (username, pname, username, pname))
-
-    # Update/Add to holding
-    cursor.execute("""
-        INSERT INTO portfolioholding (username, pname, symbol, qty)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (pname, username, symbol)
-        DO UPDATE SET qty = portfolioholding.qty + EXCLUDED.qty;
-    """, (username, pname, symbol, qty))
-
-    # Log history
-    cursor.execute("""
-        INSERT INTO portfoliohistory (username, pname, symbol, qty)
-        VALUES (%s, %s, %s, %s);
-    """, (username, pname, symbol, qty))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    return jsonify({"message": f"Added {qty} of {symbol} to portfolio '{pname}'."})
+#     return jsonify({"message": f"Added {symbol} (qty: {qty}) to {sname}."})
 
 
+# @app.route("/add_to_portfolio", methods=["POST"])
+# def add_to_portfolio():
+#     data = request.get_json()
+#     symbol = data["symbol"]
+#     pname = data["pname"]
+#     qty = int(data["qty"])
+#     username = session.get("username")
+
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
+
+#     # Ensure portfolio exists
+#     cursor.execute("""
+#         INSERT INTO portfolio (username, pname, cashbalance)
+#         SELECT %s, %s, 0
+#         WHERE NOT EXISTS (
+#             SELECT 1 FROM portfolio WHERE username = %s AND pname = %s
+#         );
+#     """, (username, pname, username, pname))
+
+#     # Update/Add to holding
+#     cursor.execute("""
+#         INSERT INTO portfolioholding (username, pname, symbol, qty)
+#         VALUES (%s, %s, %s, %s)
+#         ON CONFLICT (pname, username, symbol)
+#         DO UPDATE SET qty = portfolioholding.qty + EXCLUDED.qty;
+#     """, (username, pname, symbol, qty))
+
+#     # Log history
+#     cursor.execute("""
+#         INSERT INTO portfoliohistory (username, pname, symbol, qty)
+#         VALUES (%s, %s, %s, %s);
+#     """, (username, pname, symbol, qty))
+
+#     conn.commit()
+#     cursor.close()
+#     conn.close()
+
+#     return jsonify({"message": f"Added {qty} of {symbol} to portfolio '{pname}'."})
+
+
+#######################################################################################
+# MY Portofolio and Watchlist
+#######################################################################################
 @app.route("/portfolio_watchlist")
 def portfolio_watchlist():
     if 'username' not in session:
@@ -465,6 +467,67 @@ def portfolio_watchlist():
         watchlist_holdings=watchlist_holdings
     )
 
+# Add new portfolio
+@app.route("/add_portfolio", methods=["POST"])
+def add_portfolio():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    pname = request.form["portfolio_name"].strip()
+    cashbalance = request.form["initial_cash"]
+    username = session["username"]
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            INSERT INTO portfolio (pname, cashbalance, username)
+            VALUES (%s, %s, %s)
+        """, (pname, cashbalance, username))
+        conn.commit()
+        # flash("✅ Portfolio created successfully!", "success")
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        # flash("⚠️ Portfolio name already exists.", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
+
+# Add new watchlist
+@app.route("/add_watchlist", methods=["POST"])
+def add_watchlist():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    sname = request.form["watchlist_name"].strip()
+    username = session["username"]
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("""
+            INSERT INTO stocklist_data (sname, visible, username)
+            VALUES (%s, %s, %s)
+        """, (sname, 0, username))  # 0 = private
+        conn.commit()
+        # flash("✅ Watchlist created successfully!", "success")
+    except psycopg2.errors.UniqueViolation:
+        conn.rollback()
+        # flash("⚠️ Watchlist name already exists.", "danger")
+    finally:
+        cur.close()
+        conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
+
+
+#######################################################################################
+# MY Watchlist
+#######################################################################################
 @app.route('/watchlist_dashboard/<watchlist_name>')
 def watchlist_dashboard(watchlist_name):
     username = session['username']
@@ -529,7 +592,7 @@ def submit_comment():
 
     data = request.form
     writer = session['username']
-    owner_name = data['owner_id']
+    owner_name = data['owner_name']
     watchlist_name = data['watchlist_name']
     text = data['text']
 
@@ -559,42 +622,44 @@ def submit_comment():
     cursor.close()
     conn.close()
 
-    return redirect(url_for('view_watchlist', owner_name=owner_name, watchlist_name=watchlist_name))
+    return redirect(url_for('watchlist_performance', owner_name=owner_name, watchlist_name=watchlist_name))
 
 @app.route('/delete_comment', methods=['POST'])
 def delete_comment():
     if 'username' not in session:
         return redirect(url_for('login'))
 
-    data = request.form  # Assuming form submission, not JS fetch
-    owner_name = data['owner_name']
-    watchlist_name = data['watchlist_name']
+    owner_name = request.form.get('owner_name')
+    watchlist_name = request.form.get('watchlist_name')
+    writer = request.form.get('writer')
     current_user = session['username']
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Get writer + check permission
+    # Only allow deletion if the current user wrote the comment or is the list owner
     cursor.execute("""
-        SELECT writer FROM reviews
+        SELECT 1 FROM reviews
         WHERE sname = %s AND uname_owner = %s AND writer = %s
-    """, (watchlist_name, owner_name, current_user))
-    comment = cursor.fetchone()
+    """, (watchlist_name, owner_name, writer))
 
-    if not comment and current_user != owner_name:
+    comment_exists = cursor.fetchone()
+
+    if not comment_exists and current_user != owner_name:
+        cursor.close()
+        conn.close()
         return "No permission to delete this comment", 403
 
     cursor.execute("""
         DELETE FROM reviews
         WHERE sname = %s AND uname_owner = %s AND writer = %s
-    """, (watchlist_name, owner_name, current_user))
+    """, (watchlist_name, owner_name, writer))
 
     conn.commit()
     cursor.close()
     conn.close()
 
-    return redirect(url_for('view_watchlist', owner_name=owner_name, watchlist_name=watchlist_name))
-
+    return redirect(url_for('watchlist_performance', owner_name=owner_name, watchlist_name=watchlist_name))
 
 @app.route("/toggle_visibility", methods=["POST"])
 def toggle_visibility():
@@ -631,8 +696,10 @@ def toggle_visibility():
 
     return jsonify({"message": message}), status
 
-
-@app.route('/watchlist/<owner_name>/<watchlist_name>/')
+#######################################################################################
+# Public Watchlist view
+#######################################################################################
+@app.route('/watchlist/<owner_name>/<watchlist_name>')
 def watchlist_performance(owner_name, watchlist_name):
     if 'username' not in session:
         return redirect(url_for('login'))
@@ -698,74 +765,74 @@ def watchlist_performance(owner_name, watchlist_name):
                             current_user_id=current_user,
                             history_data=history_data)
 
-@app.route('/watchlist/<owner_name>/<watchlist_name>')
-def view_watchlist(owner_name, watchlist_name):
-    if 'username' not in session:
-        return redirect(url_for('login'))
+# @app.route('/watchlist/<owner_name>/<watchlist_name>')
+# def view_watchlist(owner_name, watchlist_name):
+#     if 'username' not in session:
+#         return redirect(url_for('login'))
 
-    current_user = session['username']
-    is_creator = (current_user == owner_name)
+#     current_user = session['username']
+#     is_creator = (current_user == owner_name)
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+#     conn = get_db_connection()
+#     cursor = conn.cursor()
 
-    # 1. Check if the stocklist exists and get visibility
-    cursor.execute("""
-        SELECT visible FROM stocklist_data
-        WHERE username = %s AND sname = %s
-    """, (owner_name, watchlist_name))
-    result = cursor.fetchone()
+#     # 1. Check if the stocklist exists and get visibility
+#     cursor.execute("""
+#         SELECT visible FROM stocklist_data
+#         WHERE username = %s AND sname = %s
+#     """, (owner_name, watchlist_name))
+#     result = cursor.fetchone()
 
-    if not result:
-        cursor.close()
-        conn.close()
-        return "❌ Stocklist does not exist", 404
+#     if not result:
+#         cursor.close()
+#         conn.close()
+#         return "❌ Stocklist does not exist", 404
 
-    visible = result[0]
+#     visible = result[0]
 
-    # 2. If private & not creator, check if the current user has written a review
-    if visible == 0 and not is_creator:
-        cursor.execute("""
-            SELECT 1 FROM reviews
-            WHERE writer = %s AND uname_owner = %s AND sname = %s
-            LIMIT 1
-        """, (current_user, owner_name, watchlist_name))
-        has_commented = cursor.fetchone() is not None
+#     # 2. If private & not creator, check if the current user has written a review
+#     if visible == 0 and not is_creator:
+#         cursor.execute("""
+#             SELECT 1 FROM reviews
+#             WHERE writer = %s AND uname_owner = %s AND sname = %s
+#             LIMIT 1
+#         """, (current_user, owner_name, watchlist_name))
+#         has_commented = cursor.fetchone() is not None
 
-        if not has_commented:
-            cursor.close()
-            conn.close()
-            return "❌ This stocklist is private and you’re not the owner or a reviewer.", 403
+#         if not has_commented:
+#             cursor.close()
+#             conn.close()
+#             return "❌ This stocklist is private and you’re not the owner or a reviewer.", 403
 
-    # 3. Fetch all reviews
-    cursor.execute("""
-        SELECT sname, uname_owner, writer, text, NULL AS timestamp
-        FROM reviews
-        WHERE uname_owner = %s AND sname = %s
-        ORDER BY writer
-    """, (owner_name, watchlist_name))
-    comments = cursor.fetchall()
+#     # 3. Fetch all reviews
+#     cursor.execute("""
+#         SELECT sname, uname_owner, writer, text, NULL AS timestamp
+#         FROM reviews
+#         WHERE uname_owner = %s AND sname = %s
+#         ORDER BY writer
+#     """, (owner_name, watchlist_name))
+#     comments = cursor.fetchall()
 
-    # 4. Check if current user already reviewed (for pre-fill)
-    cursor.execute("""
-        SELECT text FROM reviews
-        WHERE uname_owner = %s AND sname = %s AND writer = %s
-        LIMIT 1
-    """, (owner_name, watchlist_name, current_user))
-    my_comment = cursor.fetchone()
+#     # 4. Check if current user already reviewed (for pre-fill)
+#     cursor.execute("""
+#         SELECT text FROM reviews
+#         WHERE uname_owner = %s AND sname = %s AND writer = %s
+#         LIMIT 1
+#     """, (owner_name, watchlist_name, current_user))
+#     my_comment = cursor.fetchone()
 
-    cursor.close()
-    conn.close()
+#     cursor.close()
+#     conn.close()
 
-    return render_template(
-        'watchlist_comments.html',
-        comments=comments,
-        watchlist_name=watchlist_name,
-        owner_id=owner_name,
-        current_user_id=current_user,
-        my_comment=my_comment,
-        is_creator=is_creator
-    )
+#     return render_template(
+#         'watchlist_comments.html',
+#         comments=comments,
+#         watchlist_name=watchlist_name,
+#         owner_id=owner_name,
+#         current_user_id=current_user,
+#         my_comment=my_comment,
+#         is_creator=is_creator
+#     )
 
 
 

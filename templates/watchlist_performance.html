@@ -117,18 +117,22 @@
         </table>
 
         <hr>
-        <h2>📋 Comments</h2>
+        <h2>📋 Review</h2>
 
         {% for comment in comments %}
             <div class="comment-box">
-                <strong>{{ comment[2] }}</strong> 🕒 
-                <span class="timestamp" data-time="{{ comment[4] }}"></span><br>
+                <strong>{{ comment[2] }}</strong>  
+                {% if comment[2] == current_user_id or is_creator %}
+                <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment') }}" method="post" style="display:inline;" onsubmit="confirmDelete({{ comment[0] }})">
+                    <input type="hidden" name="comment_id" value="{{ comment[0] }}">
+                    <input type="hidden" name="owner_name" value="{{ owner_name }}">
+                    <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
+                    <input type="hidden" name="writer" value="{{ comment[2] }}">
+                    <button type="submit" class="delete-button">❌ Delete</button>
+                </form>
+            {% endif %} <br>
+                <!-- <span class="timestamp" data-time="{{ comment[4] }}"></span><br> -->
                 {{ comment[3] }}
-                {% if comment[1] == current_user_id or is_creator %}
-                    <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment', comment_id=comment[0]) }}" method="post" style="display:inline;">
-                        <button type="button" class="delete-button" onclick="confirmDelete({{ comment[0] }})">❌ Delete</button>
-                    </form>
-                {% endif %}
             </div>
         {% else %}
             <p>No comments yet.</p>
@@ -137,7 +141,7 @@
         <hr>
         <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
         <form method="post" action="{{ url_for('submit_comment') }}" onsubmit="clearTextArea()">
-            <input type="hidden" name="owner_id" value="{{ owner_id }}">
+            <input type="hidden" name="owner_name" value="{{ owner_name }}">
             <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
             <textarea id="commentText" name="text" rows="4" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
             <button type="submit">Submit</button>
