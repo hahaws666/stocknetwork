@@ -55,6 +55,29 @@
 
         <canvas id="priceChart"></canvas>
 
+        <form method="post" action="{{ url_for('add_stock_data', symbol=symbol) }}">
+            <h2>📥 Add New Stock Data</h2>
+            <label for="date">Date:</label>
+            <input type="date" name="date" required>
+
+            <label for="open">Open:</label>
+            <input type="number" step="0.01" name="open" required>
+
+            <label for="high">High:</label>
+            <input type="number" step="0.01" name="high" required>
+
+            <label for="low">Low:</label>
+            <input type="number" step="0.01" name="low" required>
+
+            <label for="close">Close:</label>
+            <input type="number" step="0.01" name="close" required>
+
+            <label for="volume">Volume:</label>
+            <input type="number" name="volume" required>
+
+            <button type="submit">Submit</button>
+        </form>
+
         <table>
             <thead>
                 <tr>
@@ -82,26 +105,93 @@
     </div>
 
     <script>
-        const historyData = {{ history | tojson }};
-        const labels = historyData.map(row => {
-            const date = new Date(row[0]);
-            return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-        }).reverse();
-        const closePrices = historyData.map(row => row[2]).reverse();
+        const rawData = {{ history | tojson }};
 
+        // Convert to date-keyed object
+        const dataMap = {};
+        rawData.forEach(row => {
+            const date = new Date(row[0]);
+            const iso = date.toISOString().split('T')[0];
+            dataMap[iso] = row[2];
+        });
+
+        // Save original date set for visual cue
+        const originalDatesSet = new Set(Object.keys(dataMap));
+
+        const sorted = [...rawData].sort((a, b) => new Date(a[0]) - new Date(b[0]));
+        const startDate = new Date(sorted[0][0]);
+        const endDate = new Date(sorted[sorted.length - 1][0]);
+        endDate.setDate(endDate.getDate() + 1); 
+        console.log("Start:", startDate, "End:", endDate);  // ✅ Debug 可见范围
+
+
+        // Create full weekday range
+        const allDates = [];
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const day = d.getDay();
+            if (day !== 0 && day !== 6) {
+                allDates.push(d.toISOString().split('T')[0]);
+            }
+        }
+
+        // Interpolate
+        const interpolatedPrices = [];
+        let lastKnown = null;
+        let nextKnownIndex = 0;
+
+        for (let i = 0; i < allDates.length; i++) {
+            const date = allDates[i];
+            if (dataMap[date] !== undefined) {
+                interpolatedPrices.push(dataMap[date]);
+                lastKnown = { index: i, value: dataMap[date] };
+                continue;
+            }
+
+            // Find next known
+            if (!nextKnownIndex || nextKnownIndex <= i) {
+                nextKnownIndex = i + 1;
+                while (
+                    nextKnownIndex < allDates.length &&
+                    dataMap[allDates[nextKnownIndex]] === undefined
+                ) {
+                    nextKnownIndex++;
+                }
+            }
+
+            if (
+                lastKnown !== null &&
+                nextKnownIndex < allDates.length &&
+                dataMap[allDates[nextKnownIndex]] !== undefined
+            ) {
+                const ratio = (i - lastKnown.index) / (nextKnownIndex - lastKnown.index);
+                const interpolated =
+                    lastKnown.value * (1 - ratio) +
+                    dataMap[allDates[nextKnownIndex]] * ratio;
+                interpolatedPrices.push(parseFloat(interpolated.toFixed(2)));
+            } else {
+                interpolatedPrices.push(lastKnown?.value ?? null);
+
+            }
+        }
+
+        // Chart.js
         new Chart(document.getElementById("priceChart"), {
             type: 'line',
             data: {
-                labels: labels,
+                labels: allDates,
                 datasets: [{
                     label: "Closing Price ($)",
-                    data: closePrices,
+                    data: interpolatedPrices,
                     borderColor: '#007BFF',
                     backgroundColor: 'rgba(0,123,255,0.1)',
                     fill: true,
                     tension: 0.3,
                     borderWidth: 2,
-                    pointRadius: 0
+                    pointRadius: function(ctx) {
+                        const index = ctx.dataIndex;
+                        const date = allDates[index];
+                        return originalDatesSet.has(date) ? 2 : 0;
+                    }
                 }]
             },
             options: {

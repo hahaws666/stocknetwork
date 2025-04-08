@@ -835,6 +835,38 @@ def watchlist_performance(owner_name, watchlist_name):
 #         is_creator=is_creator
 #     )
 
+@app.route('/add_stock_data/<symbol>', methods=['POST'])
+def add_stock_data(symbol): 
+    if 'username' not in session: 
+        return redirect(url_for('login'))
+    date = request.form.get('date')
+    open_price = float(request.form.get('open'))
+    high_price = float(request.form.get('high'))
+    low_price = float(request.form.get('low'))
+    close_price = float(request.form.get('close'))
+    volume = int(request.form.get('volume'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO stockhistory (date, symbol, open_price, close_price, high_price, low_price, volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (date, symbol) DO UPDATE
+        SET open_price = EXCLUDED.open_price,
+            close_price = EXCLUDED.close_price,
+            high_price = EXCLUDED.high_price,
+            low_price = EXCLUDED.low_price,
+            volume = EXCLUDED.volume;
+    """, (date, symbol, open_price, close_price, high_price, low_price, volume))
+
+    cursor.execute("UPDATE stock SET current_price = %s WHERE symbol = %s", (close_price, symbol))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('view_stock_detail', symbol=symbol))
 
 
 # 📌 用户登出
