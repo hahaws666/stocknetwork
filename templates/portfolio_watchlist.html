@@ -148,7 +148,6 @@
                     <button name="action" value="deposit" class="btn">Deposit</button>
                     <button name="action" value="withdraw" class="btn btn-danger">Withdraw</button>
                 </form>
-    
                 {% if portfolio_holdings[pname] %}
                     <table>
                         <tr>
@@ -183,7 +182,13 @@
         </div>
         {% if watchlists %}
             {% for sname in watchlists %}
-                <h3><a href="/watchlist_dashboard/{{ sname }}">🔖 {{ sname }}</a></h3>
+                <h3>
+                    <a href="/watchlist_dashboard/{{ sname }}">🔖 {{ sname }}</a>
+                    <form action="{{ url_for('delete_watchlist') }}" method="post" style="display:inline;">
+                        <input type="hidden" name="sname" value="{{ sname }}">
+                        <button type="submit" class="delete-button">❌ Delete</button>
+                    </form>
+                </h3>
                 {% if watchlist_holdings[sname] %}
                     <table>
                         <tr>

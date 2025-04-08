@@ -504,6 +504,76 @@ def add_portfolio():
         conn.close()
 
     return redirect(url_for("portfolio_watchlist"))
+@app.route("/delete_portfolio", methods=["POST"])
+def delete_portfolio():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    pname = request.form.get("pname")
+
+    if not pname:
+        return "Missing portfolio name", 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Delete related holdings and history first if you have foreign key constraints
+    cursor.execute("""
+        DELETE FROM portfolioholding 
+        WHERE username = %s AND pname = %s
+    """, (username, pname))
+
+    cursor.execute("""
+        DELETE FROM portfoliohistory 
+        WHERE username = %s AND pname = %s
+    """, (username, pname))
+
+    # Then delete the portfolio itself
+    cursor.execute("""
+        DELETE FROM portfolio WHERE username = %s AND pname = %s
+    """, (username, pname))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
+
+@app.route("/delete_watchlist", methods=["POST"])
+def delete_watchlist():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    sname = request.form.get("sname")
+
+    if not sname:
+        return "Missing watchlist name", 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Delete related holdings first
+    cursor.execute("""
+        DELETE FROM stocklistholding WHERE username = %s AND sname = %s
+    """, (username, sname))
+
+    # Delete any associated reviews
+    cursor.execute("""
+        DELETE FROM reviews WHERE uname_owner = %s AND sname = %s
+    """, (username, sname))
+
+    # Finally, delete the watchlist metadata
+    cursor.execute("""
+        DELETE FROM stocklist_data WHERE username = %s AND sname = %s
+    """, (username, sname))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
 
 # Add new watchlist
 @app.route("/add_watchlist", methods=["POST"])
@@ -773,6 +843,75 @@ def watchlist_performance(owner_name, watchlist_name):
                             owner_name=owner_name,
                             current_user_id=current_user,
                             history_data=history_data)
+
+
+@app.route('/add_to_watchlist', methods=['POST'])
+def add_to_watchlist():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    username = session['username']
+    sname = request.form.get('sname')
+    symbol = request.form.get('symbol').upper()
+    quantity = int(request.form.get('quantity'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Validate symbol exists
+    cursor.execute("SELECT 1 FROM stock WHERE symbol = %s", (symbol,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return "❌ Symbol does not exist", 400
+
+    # Ensure stocklist exists
+    cursor.execute("""
+        INSERT INTO stocklist_data (username, sname)
+        SELECT %s, %s
+        WHERE NOT EXISTS (
+            SELECT 1 FROM stocklist_data WHERE username = %s AND sname = %s
+        )
+    """, (username, sname, username, sname))
+
+    # Insert or update
+    cursor.execute("""
+        INSERT INTO stocklistholding (username, sname, symbol, qty)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (username, sname, symbol)
+        DO UPDATE SET qty = stocklistholding.qty + EXCLUDED.qty
+    """, (username, sname, symbol, quantity))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('watchlist_performance', owner_name=username, watchlist_name=sname))
+
+@app.route('/remove_stock_watchlist', methods=['POST'])
+def remove_stock_watchlist():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    username = session['username']
+    sname = request.form.get('sname')
+    symbol = request.form.get('symbol').upper()
+    quantity = int(request.form.get('qty'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM stocklistholding 
+        WHERE username = %s AND sname = %s AND symbol = %s AND qty = %s
+    """, (username, sname, symbol, quantity))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('watchlist_performance', owner_name=username, watchlist_name=sname))
+
 
 # @app.route('/watchlist/<owner_name>/<watchlist_name>')
 # def view_watchlist(owner_name, watchlist_name):
