@@ -139,8 +139,11 @@
                 <h3>
                     <a href="/portfolio_dashboard/{{ pname }}">📂 {{ pname }}</a>
                     (💰 ${{ "%.2f"|format(cashbalance) }})
+                    <form action="{{ url_for('delete_portfolio') }}" method="post" style="display:inline;">
+                        <input type="hidden" name="pname" value="{{ pname }}">
+                        <button type="submit" class="delete-button">❌ Delete</button>
+                    </form>
                 </h3>
-    
                 <!-- 🔽 新增：充值与出金表单 -->
                 <form method="POST" action="/deposit_withdraw" style="margin: 10px 0;">
                     <input type="hidden" name="pname" value="{{ pname }}">
@@ -183,7 +186,7 @@
         {% if watchlists %}
             {% for sname in watchlists %}
                 <h3>
-                    <a href="/watchlist_dashboard/{{ sname }}">🔖 {{ sname }}</a>
+                    <a href="{{ url_for('watchlist_performance', owner_name=current_user, watchlist_name=sname) }}">🔖 {{ sname }}</a>
                     <form action="{{ url_for('delete_watchlist') }}" method="post" style="display:inline;">
                         <input type="hidden" name="sname" value="{{ sname }}">
                         <button type="submit" class="delete-button">❌ Delete</button>

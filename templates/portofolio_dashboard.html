@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📈 Dashboard: {{ watchlist_name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f9fc;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 85%;
+            max-width: 1000px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            margin-top: 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            margin-bottom: 10px;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            margin-right: 15px;
+        }
+
+        canvas {
+            margin-top: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        .visibility-toggle {
+            float: right;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📊 Watchlist: {{ watchlist_name }}</h1>
+    <a href="/portfolio_watchlist">← Back</a> | <a href="/logout">Logout</a>
+
+    <div class="watchlist-section">
+        <h2>
+            📌 {{ watchlist_name }}
+            <span class="visibility-toggle">
+                Visibility:
+                <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
+                    <option value="0" {% if visibility_data == 0 %}selected{% endif %}>Private</option>
+                    <option value="1" {% if visibility_data == 1 %}selected{% endif %}>Shared with Friends</option>
+                    <option value="2" {% if visibility_data == 2 %}selected{% endif %}>Public</option>
+                </select>
+            </span>
+        </h2>
+
+        {% if history_data %}
+        <canvas id="lineChart_{{ watchlist_name }}"></canvas>
+        {% else %}
+        <p>No historical data available for this watchlist.</p>
+        {% endif %}
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Stock Symbol</th>
+                    <th>Current Price</th>
+                    <th>Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stock in stocks %}
+                <tr>
+                    <td>{{ stock[0] }}</td>
+                    <td>${{ "%.2f"|format(stock[1]) }}</td>
+                    <td>{{ stock[2] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const historyData = {{ history_data | tojson }};
+    const canvas = document.getElementById("lineChart_{{ watchlist_name }}");
+
+    if (canvas && historyData.length > 0) {
+        const ctx = canvas.getContext('2d');
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: historyData.map(p => new Date(p.date)),
+                datasets: [{
+                    label: "Total Watchlist Value ($)",
+                    data: historyData.map(p => p.price),
+                    borderColor: '#5733FF',
+                    backgroundColor: 'rgba(87, 51, 255, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: '📈 Watchlist Value Over Time'
+                    },
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            tooltipFormat: 'yyyy-MM-dd',
+                            displayFormats: {
+                                month: 'MMM yyyy'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Total Value ($)'
+                        },
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+
+    function toggleVisibility(watchlistName, visible) {
+        fetch("/toggle_visibility", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ watchlist_name: watchlistName, visible: parseInt(visible) })
+        })
+        .then(response => response.json())
+        .then(data => alert(data.message))
+        .catch(err => console.error("Toggle failed", err));
+    }
+</script>
+</body>
+</html>
