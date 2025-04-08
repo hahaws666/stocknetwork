@@ -432,6 +432,7 @@ def portfolio_watchlist():
         SELECT pname, cashbalance
         FROM portfolio
         WHERE username = %s
+        ORDER BY pname
     """, (username,))
     portfolios = cursor.fetchall()
 
@@ -865,6 +866,71 @@ def cancel_friend_request():
     conn.close()
 
     return jsonify({"message": "Friend request cancelled."}), 200
+
+
+@app.route("/deposit_withdraw", methods=["POST"])
+def deposit_withdraw():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    pname = request.form.get("pname")
+    action = request.form.get("action")  # "deposit" or "withdraw"
+    
+    try:
+        amount = float(request.form.get("amount"))
+    except (TypeError, ValueError):
+        return "Invalid amount format.", 400
+
+    if amount <= 0:
+        return "Amount must be greater than 0.", 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 获取当前余额
+    cursor.execute("""
+        SELECT cashbalance FROM portfolio WHERE username = %s AND pname = %s
+    """, (username, pname))
+    result = cursor.fetchone()
+
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Portfolio not found.", 404
+
+    current_balance = float(result[0])  # 确保是 float 类型
+
+    # Debug print（可移除）
+    print(f"[DEBUG] Action: {action}, Amount: {amount}, Current: {current_balance}")
+
+    # 更新余额
+    if action == "deposit":
+        new_balance = round(current_balance + amount, 2)
+    elif action == "withdraw":
+        if amount > current_balance:
+            cursor.close()
+            conn.close()
+            return "Not enough balance to withdraw.", 400
+        new_balance = round(current_balance - amount, 2)
+    else:
+        cursor.close()
+        conn.close()
+        return "Invalid action.", 400
+
+    # Debug 新余额
+    print(f"[DEBUG] New Balance: {new_balance}")
+
+    # 执行更新
+    cursor.execute("""
+        UPDATE portfolio SET cashbalance = %s WHERE username = %s AND pname = %s
+    """, (new_balance, username, pname))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
 
 
 @app.route('/add_stock_data/<symbol>', methods=['POST'])

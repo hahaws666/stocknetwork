@@ -137,8 +137,18 @@
         {% if portfolios %}
             {% for pname, cashbalance in portfolios %}
                 <h3>
-                    <a href="/portfolio_dashboard/{{ pname }}">📂 {{ pname }}</a> (💰 ${{ "%.2f"|format(cashbalance) }})
+                    <a href="/portfolio_dashboard/{{ pname }}">📂 {{ pname }}</a>
+                    (💰 ${{ "%.2f"|format(cashbalance) }})
                 </h3>
+    
+                <!-- 🔽 新增：充值与出金表单 -->
+                <form method="POST" action="/deposit_withdraw" style="margin: 10px 0;">
+                    <input type="hidden" name="pname" value="{{ pname }}">
+                    <input type="number" name="amount" step="0.01" placeholder="Amount" required style="padding: 5px; margin-right: 10px; width: 120px;">
+                    <button name="action" value="deposit" class="btn">Deposit</button>
+                    <button name="action" value="withdraw" class="btn btn-danger">Withdraw</button>
+                </form>
+    
                 {% if portfolio_holdings[pname] %}
                     <table>
                         <tr>
@@ -164,7 +174,7 @@
             <p class="empty-message">You have no portfolios yet.</p>
         {% endif %}
     </div>
-
+    
     <!-- Watchlists Section -->
     <div class="section">
         <div class="section-header">
