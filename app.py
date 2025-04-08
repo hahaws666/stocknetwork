@@ -1118,6 +1118,67 @@ def add_stock_data(symbol):
     return redirect(url_for('view_stock_detail', symbol=symbol))
 
 
+@app.route("/transfer_between_portfolios", methods=["POST"])
+def transfer_between_portfolios():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    from_pname = request.form["from_pname"]
+    to_pname = request.form["to_pname"]
+    amount = float(request.form["amount"])
+
+    if from_pname == to_pname:
+        return "Cannot transfer to the same portfolio", 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 获取 source portfolio 的余额
+    cursor.execute("""
+        SELECT cashbalance FROM portfolio
+        WHERE username = %s AND pname = %s
+    """, (username, from_pname))
+    result = cursor.fetchone()
+
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Source portfolio not found", 404
+
+    from_balance = result[0]
+
+    if amount > from_balance:
+        cursor.close()
+        conn.close()
+        return "Insufficient funds", 400
+
+    # 检查目标 portfolio 是否存在
+    cursor.execute("""
+        SELECT 1 FROM portfolio WHERE username = %s AND pname = %s
+    """, (username, to_pname))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return "Target portfolio not found", 404
+
+    # 扣减 source，增加 target
+    cursor.execute("""
+        UPDATE portfolio SET cashbalance = cashbalance - %s
+        WHERE username = %s AND pname = %s
+    """, (amount, username, from_pname))
+    cursor.execute("""
+        UPDATE portfolio SET cashbalance = cashbalance + %s
+        WHERE username = %s AND pname = %s
+    """, (amount, username, to_pname))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
+
+
 # 📌 用户登出
 @app.route('/logout')
 def logout():
