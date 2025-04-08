@@ -112,12 +112,13 @@ cursor.execute("""
         username VARCHAR(100),             
         symbol VARCHAR(10),
         qty INT NOT NULL,
-        timestamp TIMESTAMP DEFAULT NOW(),
+        timestamp DATE,
         PRIMARY KEY (pname, username, timestamp),
         FOREIGN KEY (pname, username) REFERENCES portfolio(pname, username) ON DELETE CASCADE,
         FOREIGN KEY (symbol) REFERENCES Stock(symbol) ON DELETE CASCADE
     );
 """)
+
 
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS stocklist_data (

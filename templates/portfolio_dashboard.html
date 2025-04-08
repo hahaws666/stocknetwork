@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>📂 Portfolio: {{ pname }}</title>
+</head>
+<body>
+    <h1>📂 Portfolio: {{ pname }}</h1>
+    <p>💰 Cash Balance: ${{ "%.2f"|format(cashbalance) }}</p>
+
+    <a href="/portfolio_watchlist">← Back</a>
+
+    <h3>📈 Holdings</h3>
+
+    <form method="post" action="{{ url_for('buy_stock') }}">
+        <input type="hidden" name="pname" value="{{ pname }}">
+        Symbol: <input name="symbol" required>
+        Qty: <input type="number" name="qty" required>
+        Date: <input type="date" name="date" required>
+        <button type="submit">Buy</button>
+    </form>
+    
+    <form method="post" action="{{ url_for('sell_stock') }}">
+        <input type="hidden" name="pname" value="{{ pname }}">
+        Symbol: <input name="symbol" required>
+        Qty: <input type="number" name="qty" required>
+        Date: <input type="date" name="date" required>
+        <button type="submit">Sell</button>
+    </form>
+    
+    {% if holdings %}
+    <table>
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Quantity</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for symbol, qty in holdings %}
+            <tr>
+                <td>{{ symbol }}</td>
+                <td>{{ qty }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>This portfolio has no holdings.</p>
+    {% endif %}
+
+
+    <hr>
+<h2>📜 Transaction History</h2>
+
+{% if history %}
+<table>
+    <thead>
+        <tr>
+            <th>Stock Symbol</th>
+            <th>Quantity</th>
+            <th>Type</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for symbol, qty, ts in history %}
+        <tr>
+            <td>{{ symbol }}</td>
+            <td>{{ qty|abs }}</td>
+            <td style="color: {{ 'green' if qty > 0 else 'red' }}">
+                {{ 'Buy' if qty > 0 else 'Sell' }}
+            </td>
+            <td>{{ ts.strftime('%Y-%m-%d') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No transaction history available.</p>
+{% endif %}
+
+</body>
+</html>

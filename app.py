@@ -57,6 +57,154 @@ def register():
     return render_template('register.html')
 
 
+@app.route("/portfolio_dashboard/<pname>")
+def portfolio_dashboard(pname):
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 获取现金余额
+    cursor.execute("""
+        SELECT cashbalance FROM portfolio WHERE username = %s AND pname = %s
+    """, (username, pname))
+    result = cursor.fetchone()
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Portfolio not found", 404
+    cashbalance = result[0]
+
+    # 获取当前持仓
+    cursor.execute("""
+        SELECT ph.symbol, ph.qty, NULL AS buy_price, NULL AS timestamp
+        FROM portfolioholding ph
+        WHERE ph.username = %s AND ph.pname = %s
+    """, (username, pname))
+    holdings = cursor.fetchall()
+
+    # 获取历史记录
+    cursor.execute("""
+        SELECT symbol, qty, timestamp
+        FROM portfoliohistory
+        WHERE username = %s AND pname = %s
+        ORDER BY timestamp DESC
+    """, (username, pname))
+    history = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template("portfolio_dashboard.html",
+                           pname=pname,
+                           cashbalance=cashbalance,
+                           holdings=holdings,
+                           history=history)
+
+
+@app.route("/buy_stock", methods=["POST"])
+def buy_stock():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    pname = request.form["pname"]
+    symbol = request.form["symbol"].upper()
+    qty = int(request.form["qty"])
+    date = request.form["date"]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 优先尝试用指定日期的价格
+    cursor.execute("SELECT close_price FROM stockhistory WHERE symbol = %s AND date = %s", (symbol, date))
+    row = cursor.fetchone()
+
+    if row:
+        price = row[0]
+    else:
+        cursor.execute("SELECT current_price FROM stock WHERE symbol = %s", (symbol,))
+        price = cursor.fetchone()[0]
+
+    total_cost = price * qty
+
+    cursor.execute("SELECT cashbalance FROM portfolio WHERE username = %s AND pname = %s", (username, pname))
+    balance = cursor.fetchone()[0]
+
+    if balance < total_cost:
+        return "❌ Not enough funds", 400
+
+    cursor.execute("UPDATE portfolio SET cashbalance = cashbalance - %s WHERE username = %s AND pname = %s", (total_cost, username, pname))
+
+    cursor.execute("""
+        INSERT INTO portfolioholding (username, pname, symbol, qty)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (pname, username, symbol) DO UPDATE SET qty = portfolioholding.qty + EXCLUDED.qty
+    """, (username, pname, symbol, qty))
+
+    cursor.execute("""
+        INSERT INTO portfoliohistory (username, pname, symbol, qty, timestamp)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (username, pname, symbol, qty, date))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_dashboard", pname=pname))
+
+
+@app.route("/sell_stock", methods=["POST"])
+def sell_stock():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    pname = request.form["pname"]
+    symbol = request.form["symbol"].upper()
+    qty = int(request.form["qty"])
+    date = request.form["date"]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT qty FROM portfolioholding WHERE username = %s AND pname = %s AND symbol = %s", (username, pname, symbol))
+    row = cursor.fetchone()
+    if not row or row[0] < qty:
+        return "❌ Not enough holdings", 400
+
+    cursor.execute("SELECT close_price FROM stockhistory WHERE symbol = %s AND date = %s", (symbol, date))
+    row = cursor.fetchone()
+
+    if row:
+        price = row[0]
+    else:
+        cursor.execute("SELECT current_price FROM stock WHERE symbol = %s", (symbol,))
+        price = cursor.fetchone()[0]
+
+    total_value = price * qty
+
+    cursor.execute("UPDATE portfolio SET cashbalance = cashbalance + %s WHERE username = %s AND pname = %s", (total_value, username, pname))
+    cursor.execute("UPDATE portfolioholding SET qty = qty - %s WHERE username = %s AND pname = %s AND symbol = %s", (qty, username, pname, symbol))
+    cursor.execute("DELETE FROM portfolioholding WHERE username = %s AND pname = %s AND symbol = %s AND qty <= 0", (username, pname, symbol))
+
+    cursor.execute("""
+        INSERT INTO portfoliohistory (username, pname, symbol, qty, timestamp)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (username, pname, symbol, -qty, date))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_dashboard", pname=pname))
+
+
+
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
