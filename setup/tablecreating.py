@@ -1,29 +1,49 @@
 import psycopg2
+from psycopg2 import sql
+from psycopg2.errors import DuplicateDatabase
 
+db_name = "stock_network"
+
+# -----------------------------------------------
+# STEP 1: Create database (need autocommit + not using the db itself)
+# -----------------------------------------------
+try:
+    # Connect to 'postgres' DB to create new one
+    conn = psycopg2.connect(
+        dbname="postgres",
+        user="postgres",
+        password="postgres",  # 修改为你的密码
+        host="localhost",
+        port="5432"
+    )
+    conn.autocommit = True
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
+        print(f"Database '{db_name}' created successfully.")
+    except DuplicateDatabase:
+        print(f"Database '{db_name}' already exists.")
+    cursor.close()
+    conn.close()
+except Exception as e:
+    print(f"[ERROR] Creating database: {e}")
+
+# -----------------------------------------------
+# STEP 2: Connect to the new database and create tables
+# -----------------------------------------------
 conn = psycopg2.connect(
-    dbname="stock_network",
+    dbname=db_name,
     user="postgres",
-    password="postgres",  
+    password="postgres",
     host="localhost",
     port="5432"
 )
 
 cursor = conn.cursor()
 
-###########################################################
-# Initiate DB
-###########################################################
-db_name = "stock_network"
-try:
-    cursor.execute(f"CREATE DATABASE {db_name};")
-    print(f"Database '{db_name}' created successfully.")
-except psycopg2.errors.DuplicateDatabase:
-    print(f"Database '{db_name}' already exists.")
+print("Creating tables...")
 
-###########################################################
-# Stock Data
-###########################################################
-
+# === 创建各个表 ===
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS Stock (
         symbol VARCHAR(10) PRIMARY KEY,
@@ -45,9 +65,6 @@ cursor.execute("""
     );
 """)
 
-###########################################################
-# User Data
-###########################################################
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         username VARCHAR(100) UNIQUE NOT NULL,
@@ -60,7 +77,7 @@ cursor.execute("""
     CREATE TABLE IF NOT EXISTS friends (
         username1 VARCHAR(100) NOT NULL,
         username2 VARCHAR(100) NOT NULL,
-        status INT NOT NULL CHECK (status IN (-1, 0, 1)),  -- -1: Rejected, 0: Pending, 1: Friend
+        status INT NOT NULL CHECK (status IN (-1, 0, 1)),
         timestamp TIMESTAMP DEFAULT NOW(),
         PRIMARY KEY (username1, username2),
         FOREIGN KEY (username1) REFERENCES users(username) ON DELETE CASCADE,
@@ -68,9 +85,6 @@ cursor.execute("""
     );
 """)
 
-###########################################################
-# Portfolio Data
-###########################################################
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS portfolio (
         pname VARCHAR(100),
@@ -88,7 +102,7 @@ cursor.execute("""
         qty INT NOT NULL,
         PRIMARY KEY (pname, username, symbol),
         FOREIGN KEY (pname, username) REFERENCES portfolio(pname, username) ON DELETE CASCADE,
-        FOREIGN KEY (symbol) REFERENCES stock(symbol) ON DELETE CASCADE
+        FOREIGN KEY (symbol) REFERENCES Stock(symbol) ON DELETE CASCADE
     );
 """)
 
@@ -101,17 +115,14 @@ cursor.execute("""
         timestamp TIMESTAMP DEFAULT NOW(),
         PRIMARY KEY (pname, username, timestamp),
         FOREIGN KEY (pname, username) REFERENCES portfolio(pname, username) ON DELETE CASCADE,
-        FOREIGN KEY (symbol) REFERENCES stock(symbol) ON DELETE CASCADE
+        FOREIGN KEY (symbol) REFERENCES Stock(symbol) ON DELETE CASCADE
     );
 """)
 
-###########################################################
-# Stocklist Data
-###########################################################
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS stocklist_data (
         sname VARCHAR(100),
-        visible INT NOT NULL DEFAULT 0 CHECK (visible IN (0, 1, 2)),  -- 0: private, 1: shared, 2: public
+        visible INT NOT NULL DEFAULT 0 CHECK (visible IN (0, 1, 2)),
         username VARCHAR(100) REFERENCES users(username) ON DELETE CASCADE,
         PRIMARY KEY (sname, username)
     );
@@ -125,7 +136,7 @@ cursor.execute("""
         qty INT NOT NULL,
         PRIMARY KEY (sname, username, symbol),
         FOREIGN KEY (sname, username) REFERENCES stocklist_data(sname, username) ON DELETE CASCADE,
-        FOREIGN KEY (symbol) REFERENCES stock(symbol) ON DELETE CASCADE
+        FOREIGN KEY (symbol) REFERENCES Stock(symbol) ON DELETE CASCADE
     );
 """)
 
@@ -141,9 +152,8 @@ cursor.execute("""
     );
 """)
 
-
 conn.commit()
 cursor.close()
 conn.close()
 
-print("[DONE] Table Created")
+print("[DONE] All tables created.")
