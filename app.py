@@ -895,16 +895,28 @@ def remove_stock_watchlist():
 
     username = session['username']
     sname = request.form.get('sname')
-    symbol = request.form.get('symbol').upper()
-    quantity = int(request.form.get('qty'))
+    symbol = request.form.get('symbol')
 
     conn = get_db_connection()
     cursor = conn.cursor()
+    print(username)
+    print(sname)
 
+    # 确保该用户拥有这个 watchlist
     cursor.execute("""
-        DELETE FROM stocklistholding 
-        WHERE username = %s AND sname = %s AND symbol = %s AND qty = %s
-    """, (username, sname, symbol, quantity))
+        SELECT 1 FROM stocklist_data
+        WHERE username = %s AND sname = %s
+    """, (username, sname))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return "Watchlist not found or no permission.", 403
+
+    # 删除该股票
+    cursor.execute("""
+        DELETE FROM stocklistholding
+        WHERE username = %s AND sname = %s AND symbol = %s
+    """, (username, sname, symbol))
 
     conn.commit()
     cursor.close()

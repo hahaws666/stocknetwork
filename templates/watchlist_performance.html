@@ -138,7 +138,7 @@
                     {% if owner_name == current_user_id %}
                     <td>
                         <form action="{{ url_for('remove_stock_watchlist') }}" method="post" style="display:inline;">
-                            <input type="hidden" name="sname" value="{{ sname }}">
+                            <input type="hidden" name="sname" value="{{ watchlist_name }}">
                             <input type="hidden" name="symbol" value="{{ stock[0] }}">
                             <input type="hidden" name="qty" value="{{ stock[2] }}">                            
                             <button type="submit" class="delete-button">❌ Delete</button>
