@@ -1,59 +1,243 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📊 我的投资组合 & 自选股</title>
+    <title>📊 My Portfolio & Watchlist</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f5f5f5;
+            padding: 30px;
+            margin: 0;
+        }
+
+        h1, h2, h3 {
+            color: #333;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            font-weight: 500;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .nav {
+            margin-bottom: 20px;
+        }
+
+        .section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007BFF;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-green {
+            background-color: #28a745;
+        }
+
+        .btn-green:hover {
+            background-color: #1e7e34;
+        }
+
+        .empty-message {
+            font-style: italic;
+            color: #777;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        .modal-buttons {
+            text-align: right;
+        }
+
+        .modal-buttons button {
+            margin-left: 10px;
+        }
+    </style>
 </head>
 <body>
-    <h1>欢迎回来, {{ current_user }}</h1>
-    <a href="/welcome">← 返回首页</a> | <a href="/logout">登出</a>
+    <h1>📊 My Portfolio & Watchlist</h1>
+    <div class="nav">
+        <a href="/welcome">← Back to Home</a> | <a href="/logout" style="color: red; font-weight: bold;">Log Out</a>
+    </div>
 
-    <hr>
+    <!-- Portfolios Section -->
+    <div class="section">
+        <div class="section-header">
+            <h2>📈 My Portfolios</h2>
+            <button class="btn" onclick="openModal('portfolioModal')">➕ Add Portfolio</button>
+        </div>
+        {% if portfolios %}
+            {% for pname, cashbalance in portfolios %}
+                <h3>
+                    <a href="/portfolio_dashboard/{{ pname }}">📂 {{ pname }}</a> (💰 ${{ "%.2f"|format(cashbalance) }})
+                </h3>
+                {% if portfolio_holdings[pname] %}
+                    <table>
+                        <tr>
+                            <th>Stock Symbol</th>
+                            <th>Quantity</th>
+                            <th>Buy Price</th>
+                            <th>Added Date</th>
+                        </tr>
+                        {% for row in portfolio_holdings[pname] %}
+                        <tr>
+                            <td>{{ row[0] }}</td>
+                            <td>{{ row[2] }}</td>
+                            <td>${{ row[3] }}</td>
+                            <td>{{ row[4] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                {% else %}
+                    <p class="empty-message">This portfolio is empty.</p>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <p class="empty-message">You have no portfolios yet.</p>
+        {% endif %}
+    </div>
 
-    <h2>📈 我的 Portfolio（投资组合）</h2>
-    {% if portfolio %}
-    <table border="1" cellpadding="5">
-        <tr>
-            <th>股票符号</th>
-            <th>公司名称</th>
-            <th>持仓数量</th>
-            <th>买入价格</th>
-            <th>添加时间</th>
-        </tr>
-        {% for row in portfolio %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] or "N/A" }}</td>
-            <td>{{ row[2] }}</td>
-            <td>{{ row[3] }}</td>
-            <td>{{ row[4] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-        <p>你还没有任何投资组合。</p>
-    {% endif %}
+    <!-- Watchlists Section -->
+    <div class="section">
+        <div class="section-header">
+            <h2>⭐ My Watchlists</h2>
+            <button class="btn btn-green" onclick="openModal('watchlistModal')">➕ Add Watchlist</button>
+        </div>
+        {% if watchlists %}
+            {% for sname in watchlists %}
+                <h3><a href="/watchlist_dashboard/{{ sname }}">🔖 {{ sname }}</a></h3>
+                {% if watchlist_holdings[sname] %}
+                    <table>
+                        <tr>
+                            <th>Stock Symbol</th>
+                        </tr>
+                        {% for row in watchlist_holdings[sname] %}
+                        <tr>
+                            <td>{{ row[0] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                {% else %}
+                    <p class="empty-message">This watchlist is empty.</p>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <p class="empty-message">You have not created any watchlists yet.</p>
+        {% endif %}
+    </div>
 
-    <hr>
+    <!-- Portfolio Modal -->
+    <div class="modal-overlay" id="portfolioModal">
+        <div class="modal">
+            <h3>📁 New Portfolio</h3>
+            <form method="POST" action="/add_portfolio">
+                <input type="text" name="portfolio_name" placeholder="Portfolio Name" required>
+                <input type="number" step="0.01" name="initial_cash" placeholder="Initial Cash Balance" required>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-danger" onclick="closeModal('portfolioModal')">Cancel</button>
+                    <button type="submit" class="btn">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-    <h2>⭐ 我的 Watchlist（自选股）</h2>
-    {% if watchlist %}
-    <table border="1" cellpadding="5">
-        <tr>
-            <th>股票符号</th>
-            <th>公司名称</th>
-            <th>自选列表名称</th>
-        </tr>
-        {% for row in watchlist %}
-        <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] or "N/A" }}</td>
-            <td>{{ row[2] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-        <p>你还没有添加自选股。</p>
-    {% endif %}
+    <!-- Watchlist Modal -->
+    <div class="modal-overlay" id="watchlistModal">
+        <div class="modal">
+            <h3>🔖 New Watchlist</h3>
+            <form method="POST" action="/add_watchlist">
+                <input type="text" name="watchlist_name" placeholder="Watchlist Name" required>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-danger" onclick="closeModal('watchlistModal')">Cancel</button>
+                    <button type="submit" class="btn btn-green">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openModal(id) {
+            document.getElementById(id).style.display = "flex";
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = "none";
+        }
+
+        // Close modal when clicking outside of it
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) overlay.style.display = 'none';
+            });
+        });
+    </script>
 </body>
 </html>

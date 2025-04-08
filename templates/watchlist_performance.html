@@ -1,104 +1,233 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Stocklist Performance</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 30px;
-    }
-    h2 {
-      text-align: center;
-    }
-    canvas {
-      margin: auto;
-      display: block;
-      max-width: 1000px;
-      max-height: 500px;
-    }
-    .back-button {
-      display: inline-block;
-      margin-bottom: 20px;
-      background-color: #eee;
-      padding: 6px 12px;
-      border-radius: 6px;
-      text-decoration: none;
-      color: #333;
-      border: 1px solid #ccc;
-    }
-    .back-button:hover {
-      background-color: #ddd;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <title>📊 Watchlist: {{ watchlist_name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f9fc;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 85%;
+            max-width: 1000px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            margin-top: 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 10px;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            margin-right: 15px;
+        }
+
+        canvas {
+            margin-top: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        .comment-box {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+
+        .delete-button {
+            color: red;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        textarea {
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .timestamp {
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        hr {
+            margin: 40px 0;
+        }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <h1>📊 Watchlist: {{ watchlist_name }}</h1>
+        <p>👤 Owner: {{ owner_name }}</p>
+        <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
 
-  <a href="/welcome" class="back-button">← 返回</a>
+        {% if history_data %}
+            <canvas id="watchlistChart"></canvas>
+        {% else %}
+            <p>No historical data available for this watchlist.</p>
+        {% endif %}
 
-  <h2>📈 Stocklist 表现</h2>
-  <canvas id="performanceChart" width="900" height="400"></canvas>
+        <table>
+            <thead>
+                <tr>
+                    <th>Stock Symbol</th>
+                    <th>Current Price</th>
+                    <th>Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stock in stocks %}
+                <tr>
+                    <td>{{ stock[0] }}</td>
+                    <td>${{ "%.2f"|format(stock[1]) }}</td>
+                    <td>{{ stock[2] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
-  <script>
-    const historyData = {{ history_data | tojson }};
-    const ctx = document.getElementById("performanceChart").getContext("2d");
+        <hr>
+        <h2>📋 Review</h2>
 
-    const datasets = Object.entries(historyData).map(([symbol, points]) => ({
-      label: symbol,
-      data: points.map(p => ({
-        x: new Date(p.date),
-        y: p.price
-      })),
-      borderWidth: 2,
-      fill: false,
-      tension: 0.3,
-      borderColor: '#' + Math.floor(Math.random() * 16777215).toString(16)
-    }));
+        {% for comment in comments %}
+            <div class="comment-box">
+                <strong>{{ comment[2] }}</strong>  
+                {% if comment[2] == current_user_id or is_creator %}
+                <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment') }}" method="post" style="display:inline;" onsubmit="confirmDelete({{ comment[0] }})">
+                    <input type="hidden" name="comment_id" value="{{ comment[0] }}">
+                    <input type="hidden" name="owner_name" value="{{ owner_name }}">
+                    <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
+                    <input type="hidden" name="writer" value="{{ comment[2] }}">
+                    <button type="submit" class="delete-button">❌ Delete</button>
+                </form>
+            {% endif %} <br>
+                <!-- <span class="timestamp" data-time="{{ comment[4] }}"></span><br> -->
+                {{ comment[3] }}
+            </div>
+        {% else %}
+            <p>No comments yet.</p>
+        {% endfor %}
 
-    new Chart(ctx, {
-      type: 'line',
-      data: { datasets },
-      options: {
-        responsive: true,
-        parsing: false,
-        plugins: {
-          title: {
-            display: true,
-            text: '📈 股票价格走势（2013 - 2018）'
-          },
-          legend: {
-            position: 'bottom'
-          }
-        },
-        scales: {
-          x: {
-            type: 'time',
-            min: '2013-01-01',
-            max: '2018-02-07',
-            time: {
-              unit: 'month',
-              displayFormats: {
-                month: 'yyyy-MM'
-              },
-              tooltipFormat: 'yyyy-MM-dd'
-            },
-            title: {
-              display: true,
-              text: '时间'
-            }
-          },
-          y: {
-            title: {
-              display: true,
-              text: '价格 ($)'
-            },
-            beginAtZero: false
-          }
+        <hr>
+        <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
+        <form method="post" action="{{ url_for('submit_comment') }}" onsubmit="clearTextArea()">
+            <input type="hidden" name="owner_name" value="{{ owner_name }}">
+            <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
+            <textarea id="commentText" name="text" rows="4" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
+            <button type="submit">Submit</button>
+        </form>
+    </div>
+
+    <script>
+        const historyData = {{ history_data | tojson }};
+        if (historyData.length > 0) {
+            new Chart(document.getElementById("watchlistChart"), {
+                type: 'line',
+                data: {
+                    labels: historyData.map(point => new Date(point.date)),
+                    datasets: [{
+                        label: "Total Watchlist Value ($)",
+                        data: historyData.map(point => point.price),
+                        borderColor: '#007BFF',
+                        backgroundColor: 'rgba(0,123,255,0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '📈 Watchlist Value Over Time',
+                            font: {
+                                size: 16
+                            }
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'month',
+                                tooltipFormat: 'yyyy-MM-dd',
+                                displayFormats: {
+                                    month: 'MMM yyyy'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Total Value ($)'
+                            },
+                            beginAtZero: false
+                        }
+                    }
+                }
+            });
         }
-      }
-    });
-  </script>
+
+        function confirmDelete(commentId) {
+            if (confirm("Are you sure you want to delete this comment?")) {
+                document.getElementById("delete-form-" + commentId).submit();
+            }
+        }
+
+        function formatTimestamps() {
+            document.querySelectorAll('.timestamp').forEach(span => {
+                const date = new Date(span.dataset.time);
+                span.innerText = new Intl.DateTimeFormat('en-US', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short'
+                }).format(date);
+            });
+        }
+
+        function clearTextArea() {
+            setTimeout(() => document.getElementById("commentText").value = "", 100);
+        }
+
+        window.onload = formatTimestamps;
+    </script>
 </body>
 </html>

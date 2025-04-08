@@ -1,37 +1,60 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📈 Watchlist Dashboard</title>
+    <title>📈 Watchlist: {{ watchlist_name }}</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
-        .container { width: 80%; margin: auto; }
-        .watchlist-section {
-            margin-top: 40px;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background-color: #f9f9f9;
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f9fc;
+            margin: 0;
+            padding: 0;
         }
+
+        .container {
+            width: 85%;
+            max-width: 1000px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            margin-top: 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            margin-bottom: 10px;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            margin-right: 15px;
+        }
+
+        canvas {
+            margin-top: 30px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
+            margin-top: 25px;
+            font-size: 14px;
         }
+
         th, td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
         }
-        canvas {
-            margin-top: 20px;
-            max-width: 100%;
-            height: 300px;
+
+        th {
+            background-color: #f0f0f0;
         }
-        h2 {
-            margin-top: 0;
-        }
+
         .visibility-toggle {
             float: right;
             font-size: 14px;
@@ -40,118 +63,108 @@
 </head>
 <body>
 <div class="container">
-    <h1>📊 我的 Watchlist</h1>
-    <a href="/welcome">← 返回首页</a> | <a href="/logout">登出</a>
+    <h1>📊 Watchlist: {{ watchlist_name }}</h1>
+    <a href="/portfolio_watchlist">← Back</a> | <a href="/logout">Logout</a>
 
-    {% for watchlist_name, stocks in watchlist_grouped.items() %}
     <div class="watchlist-section">
         <h2>
             📌 {{ watchlist_name }}
             <span class="visibility-toggle">
-                可见性：
+                Visibility:
                 <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
-                    <option value="0" {% if visibility_data[watchlist_name] == 0 %}selected{% endif %}>私有</option>
-                    <option value="1" {% if visibility_data[watchlist_name] == 1 %}selected{% endif %}>好友共享</option>
-                    <option value="2" {% if visibility_data[watchlist_name] == 2 %}selected{% endif %}>公开</option>
+                    <option value="0" {% if visibility_data == 0 %}selected{% endif %}>Private</option>
+                    <option value="1" {% if visibility_data == 1 %}selected{% endif %}>Shared with Friends</option>
+                    <option value="2" {% if visibility_data == 2 %}selected{% endif %}>Public</option>
                 </select>
             </span>
         </h2>
 
+        {% if history_data %}
         <canvas id="lineChart_{{ watchlist_name }}"></canvas>
+        {% else %}
+        <p>No historical data available for this watchlist.</p>
+        {% endif %}
 
         <table>
-            <tr>
-                <th>股票符号</th>
-                <th>公司名称</th>
-                <th>当前价格</th>
-                <th>数量</th>
-            </tr>
-            {% for stock in stocks %}
-            <tr>
-                <td>{{ stock[0] }}</td>
-                <td>{{ stock[1] or "N/A" }}</td>
-                <td>${{ "%.2f"|format(stock[2]) }}</td>
-                <td>{{ stock[3] }}</td>
-            </tr>
-            {% endfor %}
+            <thead>
+                <tr>
+                    <th>Stock Symbol</th>
+                    <th>Current Price</th>
+                    <th>Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stock in stocks %}
+                <tr>
+                    <td>{{ stock[0] }}</td>
+                    <td>${{ "%.2f"|format(stock[1]) }}</td>
+                    <td>{{ stock[2] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
     </div>
-    {% endfor %}
 </div>
 
 <script>
     const historyData = {{ history_data | tojson }};
+    const canvas = document.getElementById("lineChart_{{ watchlist_name }}");
 
-    {% for watchlist_name, stocks in watchlist_grouped.items() %}
-    const ctx{{ watchlist_name }} = document.getElementById("lineChart_{{ watchlist_name }}").getContext('2d');
+    if (canvas && historyData.length > 0) {
+        const ctx = canvas.getContext('2d');
 
-    const datasets{{ watchlist_name }} = [
-        {% for stock in stocks %}
-        {
-            label: "{{ stock[0] }}",
-            data: historyData["{{ stock[0] }}"] ? historyData["{{ stock[0] }}"].map(point => ({
-                x: new Date(point.date),
-                y: point.price
-            })) : [],
-            borderWidth: 2,
-            fill: false,
-            tension: 0.3,
-            borderColor: '#' + Math.floor(Math.random() * 16777215).toString(16)
-        },
-        {% endfor %}
-    ];
-
-    new Chart(ctx{{ watchlist_name }}, {
-        type: 'line',
-        data: {
-            datasets: datasets{{ watchlist_name }}
-        },
-        options: {
-            responsive: true,
-            parsing: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '📈 股票表现（2013 - 2018）'
-                },
-                legend: {
-                    position: 'bottom'
-                }
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: historyData.map(p => new Date(p.date)),
+                datasets: [{
+                    label: "Total Watchlist Value ($)",
+                    data: historyData.map(p => p.price),
+                    borderColor: '#5733FF',
+                    backgroundColor: 'rgba(87, 51, 255, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0
+                }]
             },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        parser: 'yyyy-MM-dd',
-                        unit: 'month',
-                        tooltipFormat: 'yyyy-MM-dd',
-                        displayFormats: {
-                            month: 'MMM yyyy',
-                            day: 'yyyy-MM-dd'
-                        }
-                    },
-                    min: '2013-01-01',
-                    max: '2018-02-07',
+            options: {
+                responsive: true,
+                plugins: {
                     title: {
                         display: true,
-                        text: '时间'
+                        text: '📈 Watchlist Value Over Time'
                     },
-                    ticks: {
-                        autoSkip: false,
-                        maxTicksLimit: 12
+                    legend: {
+                        display: false
                     }
                 },
-                y: {
-                    title: {
-                        display: true,
-                        text: '价格 ($)'
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            tooltipFormat: 'yyyy-MM-dd',
+                            displayFormats: {
+                                month: 'MMM yyyy'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
                     },
-                    beginAtZero: false
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Total Value ($)'
+                        },
+                        beginAtZero: false
+                    }
                 }
             }
-        }
-    });
-    {% endfor %}
+        });
+    }
 
     function toggleVisibility(watchlistName, visible) {
         fetch("/toggle_visibility", {
@@ -161,7 +174,7 @@
         })
         .then(response => response.json())
         .then(data => alert(data.message))
-        .catch(err => console.error("切换失败", err));
+        .catch(err => console.error("Toggle failed", err));
     }
 </script>
 </body>

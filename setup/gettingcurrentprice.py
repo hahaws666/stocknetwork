@@ -5,7 +5,7 @@ import pandas as pd
 conn = psycopg2.connect(
     dbname="stock_network",
     user="postgres",
-    password="yourpassword",  # 请替换为你的 PostgreSQL 密码
+    password="postgres",  # 请替换为你的 PostgreSQL 密码
     host="localhost",
     port="5432"
 )

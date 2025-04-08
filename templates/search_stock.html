@@ -1,70 +1,76 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>搜索股票</title>
+    <title>Search Stocks</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            text-align: left;
+        }
+
+        .message {
+            color: gray;
+            margin-top: 20px;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+        }
+
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
 </head>
 <body>
-    <h1>🔍 搜索股票符号</h1>
+    <h1>🔍 Search Stock Symbol</h1>
 
     <form method="POST" action="/search_stock">
-        <input type="text" name="keyword" placeholder="输入股票符号 (如 AAPL)" required>
-        <button type="submit">搜索</button>
+        <input type="text" name="keyword" placeholder="Enter stock symbol (e.g., AAPL)">
+        <button type="submit">Search</button>
     </form>
 
-    <ul>
-    {% for row in results %}
-        <li>
-            <strong>{{ row[0] }}</strong> — {{ row[1] or "无公司名" }}，当前价格：{{ row[2] or "未知" }}
-            <button onclick="addToWatchlist('{{ row[0] }}')">加到自选股</button>
-            <button onclick="addToPortfolio('{{ row[0] }}', '{{ row[2] or 0 }}')">加到投资组合</button>
-        </li>
-    {% endfor %}
-    </ul>
+    {% if results %}
+        <table>
+            <tr>
+                <th>Symbol</th>
+                <th>Current Price</th>
+                <th>Actions</th>
+            </tr>
+            {% for row in results %}
+            <tr>
+                <td>{{ row[0] }}</td>
+                <td>${{ "%.2f"|format(row[1]) }}</td>
+                <td class="actions">
+                    <a href="/stock/{{ row[0] }}">View Detail</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p class="message">Stock information unavailable.</p>
+    {% endif %}
 
-    <script>
-function addToWatchlist(symbol) {
-    const watchlistname = prompt("请输入自选股列表名称（默认 default）：", "default");
-    if (!watchlistname) return;
-
-    const quantity = prompt("请输入添加数量（默认 1）：", "1");
-    if (!quantity || isNaN(quantity) || quantity <= 0) return alert("请输入有效的数量");
-
-    fetch('/add_to_watchlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            symbol: symbol,
-            watchlistname: watchlistname,
-            quantity: parseInt(quantity)
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        alert(data.message);
-        location.reload(); // 🔄 自动刷新页面来看到更新效果
-    })
-    .catch(error => console.error('Error:', error));
-}
-
-    function addToPortfolio(symbol, defaultPrice) {
-        const qty = prompt("请输入购买数量：", "0");
-        if (!qty || isNaN(qty) || qty <= 0) return;
-
-        const price = prompt("请输入买入价格（默认当前价格）", defaultPrice);
-        if (!price || isNaN(price)) return;
-
-        fetch('/add_to_portfolio', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol: symbol, qty: parseInt(qty), price: parseFloat(price) })
-        })
-        .then(response => response.json())
-        .then(data => alert(data.message))
-        .catch(error => console.error('Error:', error));
-    }
-    </script>
-
-    <a href="/welcome">← 返回首页</a>
+    <a href="/welcome">← Back to Home</a>
 </body>
 </html>
