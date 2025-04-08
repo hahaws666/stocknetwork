@@ -99,7 +99,24 @@
                 body: JSON.stringify({ username2: receiverUsername })
             })
             .then(response => response.json())
-            .then(data => alert(data.message))
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function cancelFriendRequest(receiverUsername) {
+            fetch('/cancel_friend_request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username2: receiverUsername })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
             .catch(error => console.error('Error:', error));
         }
 
@@ -151,7 +168,11 @@
                 {% if user[0] != current_user %}
                 <li>
                     {{ user[0] }}
-                    <button onclick="sendFriendRequest('{{ user[0] }}')">Send Friend Request</button>
+                    {% if user[0] in sent_requests %}
+                        <button class="btn-danger" onclick="cancelFriendRequest('{{ user[0] }}')">Cancel Request</button>
+                    {% else %}
+                        <button onclick="sendFriendRequest('{{ user[0] }}')">Send Friend Request</button>
+                    {% endif %}
                 </li>
                 {% endif %}
             {% endfor %}
@@ -187,35 +208,6 @@
         </ul>
     </div>
 
-    <!-- <div class="section">
-        <h2>📁 Your Portfolio(s)</h2>
-        <ul>
-            {% for pname, cash in portfolios %}
-            <li style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="stocklist-name">{{ pname }}</span>
-                <span>💰 {{ cash | round(2) }}</span>
-            </li>
-            {% else %}
-            <li>You have no portfolios yet.</li>
-            {% endfor %}
-        </ul>
-    </div>
-    
-    <div class="section">
-        <h2>⭐ Your Watchlist(s)</h2>
-        <ul>
-            {% for w in watchlists %}
-            <li style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="stocklist-name">{{ w }}</span>
-                <a href="{{ url_for('watchlist_dashboard', watchlist_name=w) }}">View in Dashboard</a>
-            </li>
-            {% else %}
-            <li>You have no watchlists yet.</li>
-            {% endfor %}
-        </ul>
-    </div> -->
-
-    
     <div class="section">
         <h2>🗂️ Accessible Public Stocklists</h2>
         <ul>
@@ -246,7 +238,6 @@
             <li>No public stocklists available.</li>
             {% endfor %}
         </ul>
-    </div>    
+    </div>
 </body>
 </html>
-

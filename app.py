@@ -2,6 +2,7 @@ import psycopg2
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_bcrypt import Bcrypt
 from collections import defaultdict
+from datetime import datetime
 
 
 app = Flask(__name__, template_folder="templates")
@@ -117,6 +118,12 @@ def welcome():
     """, (current_username, current_username, current_username))
     friends = cursor.fetchall()
 
+    # ✅ 新增：获取当前用户发出的待处理好友请求（状态 = 0）
+    cursor.execute("""
+        SELECT username2 FROM friends WHERE username1 = %s AND status = 0
+    """, (current_username,))
+    sent_requests = [row[0] for row in cursor.fetchall()]
+
     # 🔹 4. Get accessible stocklists (public, friends, shared via comment)
     cursor.execute("""
         SELECT DISTINCT s.username, s.sname
@@ -161,7 +168,8 @@ def welcome():
         users=users,
         friend_requests=friend_requests,
         friends=friends,
-        public_stocklists=[(row[0], row[1]) for row in public_stocklists],  # mock (owner_name, list_name)
+        sent_requests=sent_requests,  # ✅ 加入传给模板
+        public_stocklists=[(row[0], row[1]) for row in public_stocklists],
         current_user=current_username,
         portfolios=portfolios,
         watchlists=watchlists
@@ -424,6 +432,7 @@ def portfolio_watchlist():
         SELECT pname, cashbalance
         FROM portfolio
         WHERE username = %s
+        ORDER BY pname
     """, (username,))
     portfolios = cursor.fetchall()
 
@@ -973,6 +982,128 @@ def remove_stock_watchlist():
 #         is_creator=is_creator
 #     )
 
+@app.route('/cancel_friend_request', methods=['POST'])
+def cancel_friend_request():
+    if 'username' not in session:
+        return jsonify({"message": "Please log in first"}), 401
+
+    data = request.json
+    username1 = session['username']  # 当前用户（发送者）
+    username2 = data.get("username2")  # 接收者
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 只删除还在 pending 状态的请求
+    cursor.execute("""
+        DELETE FROM friends
+        WHERE username1 = %s AND username2 = %s AND status = 0
+    """, (username1, username2))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"message": "Friend request cancelled."}), 200
+
+
+@app.route("/deposit_withdraw", methods=["POST"])
+def deposit_withdraw():
+    if "username" not in session:
+        return redirect(url_for("login"))
+
+    username = session["username"]
+    pname = request.form.get("pname")
+    action = request.form.get("action")  # "deposit" or "withdraw"
+    
+    try:
+        amount = float(request.form.get("amount"))
+    except (TypeError, ValueError):
+        return "Invalid amount format.", 400
+
+    if amount <= 0:
+        return "Amount must be greater than 0.", 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 获取当前余额
+    cursor.execute("""
+        SELECT cashbalance FROM portfolio WHERE username = %s AND pname = %s
+    """, (username, pname))
+    result = cursor.fetchone()
+
+    if not result:
+        cursor.close()
+        conn.close()
+        return "Portfolio not found.", 404
+
+    current_balance = float(result[0])  # 确保是 float 类型
+
+    # Debug print（可移除）
+    print(f"[DEBUG] Action: {action}, Amount: {amount}, Current: {current_balance}")
+
+    # 更新余额
+    if action == "deposit":
+        new_balance = round(current_balance + amount, 2)
+    elif action == "withdraw":
+        if amount > current_balance:
+            cursor.close()
+            conn.close()
+            return "Not enough balance to withdraw.", 400
+        new_balance = round(current_balance - amount, 2)
+    else:
+        cursor.close()
+        conn.close()
+        return "Invalid action.", 400
+
+    # Debug 新余额
+    print(f"[DEBUG] New Balance: {new_balance}")
+
+    # 执行更新
+    cursor.execute("""
+        UPDATE portfolio SET cashbalance = %s WHERE username = %s AND pname = %s
+    """, (new_balance, username, pname))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for("portfolio_watchlist"))
+
+
+@app.route('/add_stock_data/<symbol>', methods=['POST'])
+def add_stock_data(symbol): 
+    if 'username' not in session: 
+        return redirect(url_for('login'))
+    date = request.form.get('date')
+    open_price = float(request.form.get('open'))
+    high_price = float(request.form.get('high'))
+    low_price = float(request.form.get('low'))
+    close_price = float(request.form.get('close'))
+    volume = int(request.form.get('volume'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO stockhistory (date, symbol, open_price, close_price, high_price, low_price, volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (date, symbol) DO UPDATE
+        SET open_price = EXCLUDED.open_price,
+            close_price = EXCLUDED.close_price,
+            high_price = EXCLUDED.high_price,
+            low_price = EXCLUDED.low_price,
+            volume = EXCLUDED.volume;
+    """, (date, symbol, open_price, close_price, high_price, low_price, volume))
+
+    cursor.execute("UPDATE stock SET current_price = %s WHERE symbol = %s", (close_price, symbol))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return redirect(url_for('view_stock_detail', symbol=symbol))
 
 
 # 📌 用户登出
