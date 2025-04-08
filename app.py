@@ -118,6 +118,12 @@ def welcome():
     """, (current_username, current_username, current_username))
     friends = cursor.fetchall()
 
+    # ✅ 新增：获取当前用户发出的待处理好友请求（状态 = 0）
+    cursor.execute("""
+        SELECT username2 FROM friends WHERE username1 = %s AND status = 0
+    """, (current_username,))
+    sent_requests = [row[0] for row in cursor.fetchall()]
+
     # 🔹 4. Get accessible stocklists (public, friends, shared via comment)
     cursor.execute("""
         SELECT DISTINCT s.username, s.sname
@@ -162,7 +168,8 @@ def welcome():
         users=users,
         friend_requests=friend_requests,
         friends=friends,
-        public_stocklists=[(row[0], row[1]) for row in public_stocklists],  # mock (owner_name, list_name)
+        sent_requests=sent_requests,  # ✅ 加入传给模板
+        public_stocklists=[(row[0], row[1]) for row in public_stocklists],
         current_user=current_username,
         portfolios=portfolios,
         watchlists=watchlists
@@ -834,6 +841,31 @@ def watchlist_performance(owner_name, watchlist_name):
 #         my_comment=my_comment,
 #         is_creator=is_creator
 #     )
+
+@app.route('/cancel_friend_request', methods=['POST'])
+def cancel_friend_request():
+    if 'username' not in session:
+        return jsonify({"message": "Please log in first"}), 401
+
+    data = request.json
+    username1 = session['username']  # 当前用户（发送者）
+    username2 = data.get("username2")  # 接收者
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 只删除还在 pending 状态的请求
+    cursor.execute("""
+        DELETE FROM friends
+        WHERE username1 = %s AND username2 = %s AND status = 0
+    """, (username1, username2))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"message": "Friend request cancelled."}), 200
+
 
 @app.route('/add_stock_data/<symbol>', methods=['POST'])
 def add_stock_data(symbol): 
