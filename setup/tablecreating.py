@@ -11,8 +11,19 @@ conn = psycopg2.connect(
 cursor = conn.cursor()
 
 ###########################################################
+# Initiate DB
+###########################################################
+db_name = "stock_network"
+try:
+    cursor.execute(f"CREATE DATABASE {db_name};")
+    print(f"Database '{db_name}' created successfully.")
+except psycopg2.errors.DuplicateDatabase:
+    print(f"Database '{db_name}' already exists.")
+
+###########################################################
 # Stock Data
 ###########################################################
+
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS Stock (
         symbol VARCHAR(10) PRIMARY KEY,

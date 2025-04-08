@@ -1,6 +1,8 @@
 import psycopg2
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_bcrypt import Bcrypt
+from collections import defaultdict
+
 
 app = Flask(__name__, template_folder="templates")
 app.config['SECRET_KEY'] = 'your_secret_key'  # 用于 session
@@ -289,24 +291,47 @@ def delete_friend():
 @app.route('/search_stock', methods=['GET', 'POST'])
 def search_stock():
     results = []
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
     if request.method == 'POST':
         keyword = request.form.get('keyword')
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # 使用 SQL LIKE 进行模糊匹配
         cursor.execute("""
-            SELECT symbol, NULL AS company_name, current_price 
+            SELECT symbol, current_price 
             FROM stock 
             WHERE symbol ILIKE %s
         """, (f"%{keyword}%",))
+    else:
+        cursor.execute("""
+            SELECT symbol, current_price 
+            FROM stock 
+            ORDER BY symbol
+        """)
 
-        results = cursor.fetchall()
-        cursor.close()
-        conn.close()
+    results = cursor.fetchall()
+    cursor.close()
+    conn.close()
 
     return render_template('search_stock.html', results=results)
+
+@app.route('/stock/<symbol>')
+def view_stock_detail(symbol):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT date, open_price, close_price, high_price, low_price, volume
+        FROM stockhistory
+        WHERE symbol = %s
+        ORDER BY date DESC
+    """, (symbol,))
+    
+    history = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template("stock_detail.html", symbol=symbol, history=history)
+
 
 @app.route("/add_to_watchlist", methods=["POST"])
 def add_to_watchlist():
@@ -404,7 +429,7 @@ def portfolio_watchlist():
     portfolio_holdings = {}
     for pname, _ in portfolios:
         cursor.execute("""
-            SELECT ph.symbol, NULL AS company_name, ph.qty, NULL AS buy_price, NULL AS timestamp
+            SELECT ph.symbol, ph.qty, NULL AS buy_price, NULL AS timestamp
             FROM portfolioholding ph
             WHERE ph.username = %s AND ph.pname = %s
         """, (username, pname))
@@ -464,18 +489,23 @@ def watchlist_dashboard(watchlist_name):
     visibility_data = visible[0] if visible else 0
 
     # Get stock price history
-    history_data = {}
-    for symbol, _, _ in stocks:
+    portfolio_history = defaultdict(float)
+
+    for symbol, current_price, qty in stocks:
         cursor.execute("""
             SELECT date, close_price
             FROM stockhistory
             WHERE symbol = %s AND date BETWEEN '2013-01-01' AND '2018-02-07'
             ORDER BY date
         """, (symbol,))
-        history_data[symbol] = [
-            {'date': r[0].strftime('%Y-%m-%d'), 'price': r[1]}
-            for r in cursor.fetchall()
-        ]
+        for date, close_price in cursor.fetchall():
+            portfolio_history[date] += close_price * qty
+
+    # Convert to sorted list for JSON
+    history_data = [
+        {'date': d.strftime('%Y-%m-%d'), 'price': round(p, 2)}
+        for d, p in sorted(portfolio_history.items())
+    ]
 
     cursor.close()
     conn.close()
@@ -488,74 +518,6 @@ def watchlist_dashboard(watchlist_name):
         visibility_data=visibility_data
     )
 
-@app.route('/watchlist/<owner_name>/<watchlist_name>')
-def view_watchlist(owner_name, watchlist_name):
-    if 'username' not in session:
-        return redirect(url_for('login'))
-
-    current_user = session['username']
-    is_creator = (current_user == owner_name)
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # 1. Check if the stocklist exists and get visibility
-    cursor.execute("""
-        SELECT visible FROM stocklist_data
-        WHERE username = %s AND sname = %s
-    """, (owner_name, watchlist_name))
-    result = cursor.fetchone()
-
-    if not result:
-        cursor.close()
-        conn.close()
-        return "❌ Stocklist does not exist", 404
-
-    visible = result[0]
-
-    # 2. If private & not creator, check if the current user has written a review
-    if visible == 0 and not is_creator:
-        cursor.execute("""
-            SELECT 1 FROM reviews
-            WHERE writer = %s AND uname_owner = %s AND sname = %s
-            LIMIT 1
-        """, (current_user, owner_name, watchlist_name))
-        has_commented = cursor.fetchone() is not None
-
-        if not has_commented:
-            cursor.close()
-            conn.close()
-            return "❌ This stocklist is private and you’re not the owner or a reviewer.", 403
-
-    # 3. Fetch all reviews
-    cursor.execute("""
-        SELECT sname, uname_owner, writer, text, NULL AS timestamp
-        FROM reviews
-        WHERE uname_owner = %s AND sname = %s
-        ORDER BY writer
-    """, (owner_name, watchlist_name))
-    comments = cursor.fetchall()
-
-    # 4. Check if current user already reviewed (for pre-fill)
-    cursor.execute("""
-        SELECT text FROM reviews
-        WHERE uname_owner = %s AND sname = %s AND writer = %s
-        LIMIT 1
-    """, (owner_name, watchlist_name, current_user))
-    my_comment = cursor.fetchone()
-
-    cursor.close()
-    conn.close()
-
-    return render_template(
-        'watchlist_comments.html',
-        comments=comments,
-        watchlist_name=watchlist_name,
-        owner_id=owner_name,
-        current_user_id=current_user,
-        my_comment=my_comment,
-        is_creator=is_creator
-    )
 
 #######################################################################################
 # Comment Function
@@ -670,38 +632,141 @@ def toggle_visibility():
     return jsonify({"message": message}), status
 
 
-@app.route('/watchlist/<owner_name>/<watchlist_name>/performance')
+@app.route('/watchlist/<owner_name>/<watchlist_name>/')
 def watchlist_performance(owner_name, watchlist_name):
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    current_user = session['username']
+    is_creator = (current_user == owner_name)
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT sh.symbol, NULL AS company_name, s.current_price, sh.qty
+        SELECT sh.symbol, s.current_price, sh.qty
         FROM stocklistholding sh
         JOIN stock s ON sh.symbol = s.symbol
         WHERE sh.username = %s AND sh.sname = %s
     """, (owner_name, watchlist_name))
     stocks = cursor.fetchall()
 
-    history_data = {}
-    for symbol, _, _, _ in stocks:
+    # Aggregate total value per date
+    portfolio_history = defaultdict(float)
+
+    for symbol, _, qty in stocks:
         cursor.execute("""
             SELECT date, close_price
             FROM stockhistory
             WHERE symbol = %s AND date BETWEEN '2013-01-01' AND '2018-02-07'
-            ORDER BY date;
+            ORDER BY date
         """, (symbol,))
-        rows = cursor.fetchall()
-        history_data[symbol] = [{'date': r[0].strftime('%Y-%m-%d'), 'price': r[1]} for r in rows]
+        for date, close_price in cursor.fetchall():
+            portfolio_history[date] += close_price * qty
+
+    # Format for charting
+    history_data = [
+        {'date': d.strftime('%Y-%m-%d'), 'price': round(v, 2)}
+        for d, v in sorted(portfolio_history.items())
+    ]
+    # 3. Fetch all reviews
+    cursor.execute("""
+        SELECT sname, uname_owner, writer, text, NULL AS timestamp
+        FROM reviews
+        WHERE uname_owner = %s AND sname = %s
+        ORDER BY writer
+    """, (owner_name, watchlist_name))
+    comments = cursor.fetchall()
+
+    # 4. Check if current user already reviewed (for pre-fill)
+    cursor.execute("""
+        SELECT text FROM reviews
+        WHERE uname_owner = %s AND sname = %s AND writer = %s
+        LIMIT 1
+    """, (owner_name, watchlist_name, current_user))
+    my_comment = cursor.fetchone()
+
 
     cursor.close()
     conn.close()
 
     return render_template("watchlist_performance.html",
-                           stocks=stocks,
-                           watchlist_name=watchlist_name,
-                           owner_name=owner_name,
-                           history_data=history_data)
+                            comments=comments,
+                            stocks=stocks,
+                            watchlist_name=watchlist_name,
+                            owner_name=owner_name,
+                            current_user_id=current_user,
+                            history_data=history_data)
+
+@app.route('/watchlist/<owner_name>/<watchlist_name>')
+def view_watchlist(owner_name, watchlist_name):
+    if 'username' not in session:
+        return redirect(url_for('login'))
+
+    current_user = session['username']
+    is_creator = (current_user == owner_name)
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Check if the stocklist exists and get visibility
+    cursor.execute("""
+        SELECT visible FROM stocklist_data
+        WHERE username = %s AND sname = %s
+    """, (owner_name, watchlist_name))
+    result = cursor.fetchone()
+
+    if not result:
+        cursor.close()
+        conn.close()
+        return "❌ Stocklist does not exist", 404
+
+    visible = result[0]
+
+    # 2. If private & not creator, check if the current user has written a review
+    if visible == 0 and not is_creator:
+        cursor.execute("""
+            SELECT 1 FROM reviews
+            WHERE writer = %s AND uname_owner = %s AND sname = %s
+            LIMIT 1
+        """, (current_user, owner_name, watchlist_name))
+        has_commented = cursor.fetchone() is not None
+
+        if not has_commented:
+            cursor.close()
+            conn.close()
+            return "❌ This stocklist is private and you’re not the owner or a reviewer.", 403
+
+    # 3. Fetch all reviews
+    cursor.execute("""
+        SELECT sname, uname_owner, writer, text, NULL AS timestamp
+        FROM reviews
+        WHERE uname_owner = %s AND sname = %s
+        ORDER BY writer
+    """, (owner_name, watchlist_name))
+    comments = cursor.fetchall()
+
+    # 4. Check if current user already reviewed (for pre-fill)
+    cursor.execute("""
+        SELECT text FROM reviews
+        WHERE uname_owner = %s AND sname = %s AND writer = %s
+        LIMIT 1
+    """, (owner_name, watchlist_name, current_user))
+    my_comment = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'watchlist_comments.html',
+        comments=comments,
+        watchlist_name=watchlist_name,
+        owner_id=owner_name,
+        current_user_id=current_user,
+        my_comment=my_comment,
+        is_creator=is_creator
+    )
+
 
 
 # 📌 用户登出

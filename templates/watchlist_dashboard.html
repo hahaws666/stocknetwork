@@ -2,36 +2,59 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>📈 Watchlist Dashboard</title>
+    <title>📈 Watchlist: {{ watchlist_name }}</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
-        .container { width: 80%; margin: auto; }
-        .watchlist-section {
-            margin-top: 40px;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background-color: #f9f9f9;
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f9fc;
+            margin: 0;
+            padding: 0;
         }
+
+        .container {
+            width: 85%;
+            max-width: 1000px;
+            margin: auto;
+            padding: 20px;
+            background-color: white;
+            margin-top: 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            margin-bottom: 10px;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            margin-right: 15px;
+        }
+
+        canvas {
+            margin-top: 30px;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
+            margin-top: 25px;
+            font-size: 14px;
         }
+
         th, td {
-            padding: 8px;
-            text-align: left;
-            border-bottom: 1px solid #ccc;
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
         }
-        canvas {
-            margin-top: 20px;
-            max-width: 100%;
-            height: 300px;
+
+        th {
+            background-color: #f0f0f0;
         }
-        h2 {
-            margin-top: 0;
-        }
+
         .visibility-toggle {
             float: right;
             font-size: 14px;
@@ -40,7 +63,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>📊 My Watchlist</h1>
+    <h1>📊 Watchlist: {{ watchlist_name }}</h1>
     <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
 
     <div class="watchlist-section">
@@ -55,93 +78,93 @@
                 </select>
             </span>
         </h2>
-    
+
+        {% if history_data %}
         <canvas id="lineChart_{{ watchlist_name }}"></canvas>
-    
+        {% else %}
+        <p>No historical data available for this watchlist.</p>
+        {% endif %}
+
         <table>
-            <tr>
-                <th>Stock Symbol</th>
-                <th>Company Name</th>
-                <th>Current Price</th>
-            </tr>
-            {% for stock in stocks %}
-            <tr>
-                <td>{{ stock[0] }}</td>
-                <td>{{ stock[1] or "N/A" }}</td>
-                <td>${{ "%.2f"|format(stock[2]) }}</td>
-            </tr>
-            {% endfor %}
+            <thead>
+                <tr>
+                    <th>Stock Symbol</th>
+                    <th>Current Price</th>
+                    <th>Quantity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stock in stocks %}
+                <tr>
+                    <td>{{ stock[0] }}</td>
+                    <td>${{ "%.2f"|format(stock[1]) }}</td>
+                    <td>{{ stock[2] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
         </table>
-    </div>    
+    </div>
 </div>
 
 <script>
     const historyData = {{ history_data | tojson }};
+    const canvas = document.getElementById("lineChart_{{ watchlist_name }}");
 
-    const colorPalette = [
-        '#FF5733', '#33FF57', '#5733FF', '#F0C808', '#08C8F0', 
-        '#E91E63', '#00BCD4', '#FF9800', '#8BC34A', '#9C27B0'
-    ];
+    if (canvas && historyData.length > 0) {
+        const ctx = canvas.getContext('2d');
 
-    const ctx = document.getElementById("lineChart_{{ watchlist_name }}").getContext('2d');
-
-    const datasets = [
-        {% for stock in stocks %}
-        {
-            label: "{{ stock[0] }}",
-            data: historyData["{{ stock[0] }}"] ? historyData["{{ stock[0] }}"].map(point => ({
-                x: new Date(point.date),
-                y: point.price
-            })) : [],
-            borderWidth: 2,
-            fill: false,
-            tension: 0.3,
-            borderColor: colorPalette[{{ loop.index0 }} % colorPalette.length]
-        },
-        {% endfor %}
-    ];
-
-    new Chart(ctx, {
-        type: 'line',
-        data: { datasets },
-        options: {
-            responsive: true,
-            parsing: false,
-            plugins: {
-                title: {
-                    display: true,
-                    text: '📈 Stock Performance'
-                },
-                legend: {
-                    position: 'bottom'
-                }
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: historyData.map(p => new Date(p.date)),
+                datasets: [{
+                    label: "Total Watchlist Value ($)",
+                    data: historyData.map(p => p.price),
+                    borderColor: '#5733FF',
+                    backgroundColor: 'rgba(87, 51, 255, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0
+                }]
             },
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: 'month',
-                        tooltipFormat: 'yyyy-MM-dd',
-                        displayFormats: {
-                            month: 'MMM yyyy',
-                            day: 'yyyy-MM-dd'
-                        }
-                    },
+            options: {
+                responsive: true,
+                plugins: {
                     title: {
                         display: true,
-                        text: 'Time'
+                        text: '📈 Watchlist Value Over Time'
+                    },
+                    legend: {
+                        display: false
                     }
                 },
-                y: {
-                    title: {
-                        display: true,
-                        text: 'Price ($)'
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            tooltipFormat: 'yyyy-MM-dd',
+                            displayFormats: {
+                                month: 'MMM yyyy'
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
                     },
-                    beginAtZero: false
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Total Value ($)'
+                        },
+                        beginAtZero: false
+                    }
                 }
             }
-        }
-    });
+        });
+    }
 
     function toggleVisibility(watchlistName, visible) {
         fetch("/toggle_visibility", {

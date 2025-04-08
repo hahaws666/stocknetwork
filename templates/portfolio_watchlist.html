@@ -3,9 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <title>📊 My Portfolio & Watchlist</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background-color: #f9f9f9;
+        }
+
+        h1, h2, h3 {
+            color: #333;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            margin-right: 10px;
+        }
+
+        hr {
+            margin: 40px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 30px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ccc;
+            text-align: left;
+        }
+
+        th {
+            background-color: #efefef;
+        }
+
+        .empty-message {
+            font-style: italic;
+            color: #777;
+        }
+    </style>
 </head>
 <body>
-    <h1>Welcome back, {{ current_user }}</h1>
+    <h1>📊 My Portfolio & Watchlist</h1>
     <a href="/welcome">← Back to Home</a> | <a href="/logout">Log Out</a>
 
     <hr>
@@ -13,32 +56,33 @@
     <h2>📈 My Portfolios</h2>
     {% if portfolios %}
         {% for pname, cashbalance in portfolios %}
-            <h3>Portfolio: {{ pname }} (💰 {{ cashbalance }})</h3>
+            <h3>
+                <a href="/portfolio_dashboard/{{ pname }}">📂 {{ pname }}</a>
+                (💰 ${{ "%.2f"|format(cashbalance) }})
+            </h3>
             {% if portfolio_holdings[pname] %}
-                <table border="1" cellpadding="5">
+                <table>
                     <tr>
                         <th>Stock Symbol</th>
-                        <th>Company Name</th>
-                        <th>Quantity Held</th>
+                        <th>Quantity</th>
                         <th>Buy Price</th>
-                        <th>Added Time</th>
+                        <th>Added Date</th>
                     </tr>
                     {% for row in portfolio_holdings[pname] %}
                     <tr>
                         <td>{{ row[0] }}</td>
-                        <td>{{ row[1] or "N/A" }}</td>
                         <td>{{ row[2] }}</td>
-                        <td>{{ row[3] }}</td>
+                        <td>${{ row[3] }}</td>
                         <td>{{ row[4] }}</td>
                     </tr>
                     {% endfor %}
                 </table>
             {% else %}
-                <p>This portfolio is empty.</p>
+                <p class="empty-message">This portfolio is empty.</p>
             {% endif %}
         {% endfor %}
     {% else %}
-        <p>You have no portfolios yet.</p>
+        <p class="empty-message">You have no portfolios yet.</p>
     {% endif %}
 
     <hr>
@@ -46,26 +90,24 @@
     <h2>⭐ My Watchlists</h2>
     {% if watchlists %}
         {% for sname in watchlists %}
-            <h3>Watchlist: {{ sname }}</h3>
+            <h3><a href="/watchlist_dashboard/{{ sname }}">🔖 {{ sname }}</a></h3>
             {% if watchlist_holdings[sname] %}
-                <table border="1" cellpadding="5">
+                <table>
                     <tr>
                         <th>Stock Symbol</th>
-                        <th>Company Name</th>
                     </tr>
                     {% for row in watchlist_holdings[sname] %}
                     <tr>
                         <td>{{ row[0] }}</td>
-                        <td>{{ row[1] or "N/A" }}</td>
                     </tr>
                     {% endfor %}
                 </table>
             {% else %}
-                <p>This watchlist is empty.</p>
+                <p class="empty-message">This watchlist is empty.</p>
             {% endif %}
         {% endfor %}
     {% else %}
-        <p>You have not created any watchlists yet.</p>
+        <p class="empty-message">You have not created any watchlists yet.</p>
     {% endif %}
 </body>
 </html>
