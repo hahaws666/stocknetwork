@@ -88,21 +88,45 @@
 <body>
     <div class="container">
         <h1>📊 Watchlist: {{ watchlist_name }}</h1>
-        <p>👤 Owner: {{ owner_name }}</p>
         <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
-
+        <p>👤 Owner: {{ owner_name }}</p>             
+        {% if owner_name == current_user_id %}
+        <span class="visibility-toggle">
+            Visibility:
+            <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
+                <option value="0" {% if visibility_data == 0 %}selected{% endif %}>Private</option>
+                <option value="1" {% if visibility_data == 1 %}selected{% endif %}>Shared with Friends</option>
+                <option value="2" {% if visibility_data == 2 %}selected{% endif %}>Public</option>
+            </select>
+        </span>
+        {% endif %} <br>
+    
         {% if history_data %}
             <canvas id="watchlistChart"></canvas>
         {% else %}
             <p>No historical data available for this watchlist.</p>
         {% endif %}
 
+        {% if owner_name == current_user_id %}
+        <hr>
+        <h3>➕ Add Stock to Watchlist</h3>
+        <form action="{{ url_for('add_to_watchlist') }}" method="post">
+            <input type="hidden" name="sname" value="{{ watchlist_name }}">
+            <label>Symbol: <input type="text" name="symbol" required></label>
+            <label>Quantity: <input type="number" name="quantity" value="1" min="1" required></label>
+            <button type="submit">Add</button>
+        </form>
+        {% endif %}
+        
         <table>
             <thead>
                 <tr>
                     <th>Stock Symbol</th>
                     <th>Current Price</th>
                     <th>Quantity</th>
+                    {% if owner_name == current_user_id %}
+                    <th>Action</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -111,6 +135,16 @@
                     <td>{{ stock[0] }}</td>
                     <td>${{ "%.2f"|format(stock[1]) }}</td>
                     <td>{{ stock[2] }}</td>
+                    {% if owner_name == current_user_id %}
+                    <td>
+                        <form action="{{ url_for('remove_stock_watchlist') }}" method="post" style="display:inline;">
+                            <input type="hidden" name="sname" value="{{ sname }}">
+                            <input type="hidden" name="symbol" value="{{ stock[0] }}">
+                            <input type="hidden" name="qty" value="{{ stock[2] }}">                            
+                            <button type="submit" class="delete-button">❌ Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>
@@ -122,7 +156,7 @@
         {% for comment in comments %}
             <div class="comment-box">
                 <strong>{{ comment[2] }}</strong>  
-                {% if comment[2] == current_user_id or is_creator %}
+                {% if comment[2] == current_user_id or owner_name == current_user_id %}
                 <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment') }}" method="post" style="display:inline;" onsubmit="confirmDelete({{ comment[0] }})">
                     <input type="hidden" name="comment_id" value="{{ comment[0] }}">
                     <input type="hidden" name="owner_name" value="{{ owner_name }}">
@@ -137,7 +171,8 @@
         {% else %}
             <p>No comments yet.</p>
         {% endfor %}
-
+        
+    
         <hr>
         <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
         <form method="post" action="{{ url_for('submit_comment') }}" onsubmit="clearTextArea()">
@@ -228,6 +263,17 @@
         }
 
         window.onload = formatTimestamps;
+        
+        function toggleVisibility(watchlistName, visible) {
+            fetch("/toggle_visibility", {
+                method: "POST",
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ watchlist_name: watchlistName, visible: parseInt(visible) })
+            })
+            .then(response => response.json())
+            .then(data => alert(data.message))
+            .catch(err => console.error("Toggle failed", err));
+        }
     </script>
 </body>
 </html>
