@@ -2,9 +2,9 @@ import psycopg2
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from flask_bcrypt import Bcrypt
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime,timedelta
 import pandas as pd
-
+from pmdarima import auto_arima
 
 app = Flask(__name__, template_folder="templates")
 app.config['SECRET_KEY'] = 'your_secret_key'  # 用于 session
@@ -343,23 +343,42 @@ def search_stock():
 
     return render_template('search_stock.html', results=results)
 
-@app.route('/stock/<symbol>')
+@app.route('/stock/<symbol>', methods=['GET', 'POST'])
 def view_stock_detail(symbol):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Fetch historical data
     cursor.execute("""
         SELECT date, open_price, close_price, high_price, low_price, volume
         FROM stockhistory
         WHERE symbol = %s
-        ORDER BY date DESC
+        ORDER BY date
     """, (symbol,))
-    
     history = cursor.fetchall()
+
+    prediction_data = []
+    prediction_end = None
+
+    if request.method == 'POST':
+        prediction_end = request.form.get("prediction_end")
+        if history and prediction_end:
+            last_date = max(row[0] for row in history)
+            start_date = last_date.strftime('%Y-%m-%d')
+            try:
+                prediction_data = calculate_prediction(cursor, symbol, start_date, prediction_end)
+            except Exception as e:
+                print(f"Prediction error: {e}")
+                prediction_data = []
+
     cursor.close()
     conn.close()
 
-    return render_template("stock_detail.html", symbol=symbol, history=history)
+    return render_template("stock_detail.html",
+                           symbol=symbol,
+                           history=history,
+                           prediction_data=prediction_data,
+                           prediction_end=prediction_end)
 
 @app.route('/add_stock_data/<symbol>', methods=['POST'])
 def add_stock_data(symbol): 
@@ -406,6 +425,8 @@ def add_stock_data(symbol):
     conn.close()
 
     return redirect(url_for('view_stock_detail', symbol=symbol))
+
+
 
 #######################################################################################
 # Portofolio and Watchlist
@@ -1322,7 +1343,7 @@ def sell_stock():
     return redirect(url_for("portfolio_dashboard", pname=pname))
 
 #######################################################################################
-# Portofolio
+# Stat and Prediction
 #######################################################################################
 def calculate_beta(cursor, symbol, start, end):
     cursor.execute("""
@@ -1387,6 +1408,52 @@ def calculate_cov_matrix(cursor, symbols, start, end):
     df = pd.DataFrame(returns_dict).dropna()
     return df.cov().round(4).to_dict()
 
+def calculate_prediction(cursor, symbol, start, end):
+    start_date = pd.to_datetime(start)
+    end_date = pd.to_datetime(end)
+    forecast_days = (end_date - start_date).days + 1
+
+    # Fetch historical data BEFORE the prediction window
+    cursor.execute("""
+        SELECT date, close_price
+        FROM StockHistory
+        WHERE symbol = %s AND date < %s
+        ORDER BY date
+    """, (symbol, start))
+    rows = cursor.fetchall()
+
+    if not rows or len(rows) < 30:
+        raise ValueError(f"Insufficient historical data for '{symbol}'. At least 30 records are required.")
+
+    df = pd.DataFrame(rows, columns=['date', 'close_price'])
+    df.set_index('date', inplace=True)
+    df.index = pd.to_datetime(df.index)
+
+    # 🛠 Fix: Set frequency and fill missing business days
+    df = df.asfreq('B')  # business day frequency
+    df['close_price'] = df['close_price'].astype(float)
+    df['close_price'] = df['close_price'].ffill()
+
+    try:
+        model = auto_arima(df['close_price'], 
+                        start_p=1, start_q=1,
+                        max_p=5, max_q=5,
+                        seasonal=False,
+                        stepwise=True, 
+                        suppress_warnings=True, 
+                        error_action="ignore")
+        forecast = model.predict(n_periods=forecast_days)
+        # Recreate future business dates aligned to start
+        future_dates = pd.bdate_range(start=start_date, periods=forecast_days)
+        predicted_series = list(zip(
+            [d.strftime('%Y-%m-%d') for d in future_dates],
+            forecast.round(2).tolist()
+        ))
+
+        return predicted_series
+
+    except Exception as e:
+        raise RuntimeError(f"ARIMA prediction failed for {symbol}: {e}")
 #######################################################################################
 # Logout
 #######################################################################################

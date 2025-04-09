@@ -4,231 +4,164 @@
     <meta charset="UTF-8">
     <title>📉 {{ symbol }} Stock History</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f7f9fc;
-            margin: 0;
-            padding: 0;
-        }
+        body { font-family: Arial, sans-serif; background-color: #f7f9fc; margin: 0; padding: 0; }
         .container {
-            width: 85%;
-            max-width: 1000px;
-            margin: auto;
-            padding: 20px;
-            background-color: white;
-            margin-top: 40px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 85%; max-width: 1000px; margin: auto; padding: 20px;
+            background-color: white; margin-top: 40px;
+            border-radius: 10px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        h1 {
-            margin-bottom: 10px;
-        }
-        a {
-            text-decoration: none;
-            color: #007BFF;
-            margin-right: 15px;
-        }
+        h1 { margin-bottom: 10px; }
+        a { text-decoration: none; color: #007BFF; margin-right: 15px; }
         table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 25px;
-            font-size: 14px;
+            width: 100%; border-collapse: collapse;
+            margin-top: 25px; font-size: 14px;
         }
         th, td {
-            padding: 10px;
-            text-align: center;
+            padding: 10px; text-align: center;
             border-bottom: 1px solid #ddd;
         }
-        th {
-            background-color: #f0f0f0;
-        }
-        canvas {
-            margin-top: 30px;
-        }
+        th { background-color: #f0f0f0; }
+        canvas { margin-top: 30px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📊 Stock History: {{ symbol }}</h1>
-        <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
+<div class="container">
+    <h1>📈 Stock History: {{ symbol }}</h1>
+    <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
 
-        <canvas id="priceChart"></canvas>
+    <form method="post" style="margin-top: 20px;">
+        <label for="prediction_end">🔮 Predict up to:</label>
+        <input type="date" name="prediction_end" required>
+        <button type="submit">Generate Forecast</button>
+    </form>
 
-        <form method="post" action="{{ url_for('add_stock_data', symbol=symbol) }}">
-            <h2>📥 Add New Stock Data</h2>
-            <label for="date">Date:</label>
-            <input type="date" name="date" required>
+    <canvas id="priceChart"></canvas>
 
-            <label for="open">Open:</label>
-            <input type="number" step="0.01" name="open" required>
+    <form method="post" action="{{ url_for('add_stock_data', symbol=symbol) }}">
+        <h2>📅 Add New Stock Data</h2>
+        <label>Date: <input type="date" name="date" required></label>
+        <label>Open: <input type="number" step="0.01" name="open" required></label>
+        <label>High: <input type="number" step="0.01" name="high" required></label>
+        <label>Low: <input type="number" step="0.01" name="low" required></label>
+        <label>Close: <input type="number" step="0.01" name="close" required></label>
+        <label>Volume: <input type="number" name="volume" required></label>
+        <button type="submit">Submit</button>
+    </form>
 
-            <label for="high">High:</label>
-            <input type="number" step="0.01" name="high" required>
+    <table>
+        <thead>
+        <tr>
+            <th>Date</th>
+            <th>Open</th>
+            <th>Close</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Volume</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in history|reverse %}
+        <tr>
+            <td>{{ row[0].strftime('%Y-%m-%d') }}</td>
+            <td>${{ "%.2f"|format(row[1]) }}</td>
+            <td>${{ "%.2f"|format(row[2]) }}</td>
+            <td>${{ "%.2f"|format(row[3]) }}</td>
+            <td>${{ "%.2f"|format(row[4]) }}</td>
+            <td>{{ "{:,}".format(row[5]) }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
 
-            <label for="low">Low:</label>
-            <input type="number" step="0.01" name="low" required>
+<script>
+    const historyData = {{ history | tojson | safe }};
+    const predictionData = {{ prediction_data | tojson | safe }};
 
-            <label for="close">Close:</label>
-            <input type="number" step="0.01" name="close" required>
+    // Convert historical data to chart points
+    const historyPoints = historyData.map(row => ({
+        date: row[0], // Assumes row[0] is already a "YYYY-MM-DD" string
+        close: row[2]
+    }));
 
-            <label for="volume">Volume:</label>
-            <input type="number" name="volume" required>
+    const forecastStartIndex = historyPoints.length - 1;
 
-            <button type="submit">Submit</button>
-        </form>
+    const labels = historyPoints.map(p => new Date(p.date))
+                    .concat(predictionData.map(p => new Date(p[0])));
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Open</th>
-                    <th>Close</th>
-                    <th>High</th>
-                    <th>Low</th>
-                    <th>Volume</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in history %}
-                <tr>
-                    <td>{{ row[0].strftime('%Y-%m-%d') }}</td>
-                    <td>${{ "%.2f"|format(row[1]) }}</td>
-                    <td>${{ "%.2f"|format(row[2]) }}</td>
-                    <td>${{ "%.2f"|format(row[3]) }}</td>
-                    <td>${{ "%.2f"|format(row[4]) }}</td>
-                    <td>{{ "{:,}".format(row[5]) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    const actualPrices = historyPoints.map(p => p.close);
 
-    <script>
-        const rawData = {{ history | tojson }};
+    const forecastPrices = historyPoints.slice(0, forecastStartIndex).map(_ => null)
+                            .concat([historyPoints[forecastStartIndex].close])
+                            .concat(predictionData.map(p => p[1]));
 
-        // Convert to date-keyed object
-        const dataMap = {};
-        rawData.forEach(row => {
-            const date = new Date(row[0]);
-            const iso = date.toISOString().split('T')[0];
-            dataMap[iso] = row[2];
-        });
-
-        // Save original date set for visual cue
-        const originalDatesSet = new Set(Object.keys(dataMap));
-
-        const sorted = [...rawData].sort((a, b) => new Date(a[0]) - new Date(b[0]));
-        const startDate = new Date(sorted[0][0]);
-        const endDate = new Date(sorted[sorted.length - 1][0]);
-        endDate.setDate(endDate.getDate() + 1); 
-        console.log("Start:", startDate, "End:", endDate);  // ✅ Debug 可见范围
-
-
-        // Create full weekday range
-        const allDates = [];
-        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-            const day = d.getDay();
-            if (day !== 0 && day !== 6) {
-                allDates.push(d.toISOString().split('T')[0]);
-            }
-        }
-
-        // Interpolate
-        const interpolatedPrices = [];
-        let lastKnown = null;
-        let nextKnownIndex = 0;
-
-        for (let i = 0; i < allDates.length; i++) {
-            const date = allDates[i];
-            if (dataMap[date] !== undefined) {
-                interpolatedPrices.push(dataMap[date]);
-                lastKnown = { index: i, value: dataMap[date] };
-                continue;
-            }
-
-            // Find next known
-            if (!nextKnownIndex || nextKnownIndex <= i) {
-                nextKnownIndex = i + 1;
-                while (
-                    nextKnownIndex < allDates.length &&
-                    dataMap[allDates[nextKnownIndex]] === undefined
-                ) {
-                    nextKnownIndex++;
-                }
-            }
-
-            if (
-                lastKnown !== null &&
-                nextKnownIndex < allDates.length &&
-                dataMap[allDates[nextKnownIndex]] !== undefined
-            ) {
-                const ratio = (i - lastKnown.index) / (nextKnownIndex - lastKnown.index);
-                const interpolated =
-                    lastKnown.value * (1 - ratio) +
-                    dataMap[allDates[nextKnownIndex]] * ratio;
-                interpolatedPrices.push(parseFloat(interpolated.toFixed(2)));
-            } else {
-                interpolatedPrices.push(lastKnown?.value ?? null);
-
-            }
-        }
-
-        // Chart.js
-        new Chart(document.getElementById("priceChart"), {
-            type: 'line',
-            data: {
-                labels: allDates,
-                datasets: [{
-                    label: "Closing Price ($)",
-                    data: interpolatedPrices,
+    new Chart(document.getElementById("priceChart"), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: "Historical Closing Price ($)",
+                    data: actualPrices,
                     borderColor: '#007BFF',
                     backgroundColor: 'rgba(0,123,255,0.1)',
                     fill: true,
                     tension: 0.3,
                     borderWidth: 2,
-                    pointRadius: function(ctx) {
-                        const index = ctx.dataIndex;
-                        const date = allDates[index];
-                        return originalDatesSet.has(date) ? 2 : 0;
-                    }
-                }]
+                },
+                {
+                    label: "Forecasted Price ($)",
+                    data: forecastPrices,
+                    borderColor: '#FF5733',
+                    backgroundColor: 'rgba(255,87,51,0.1)',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0.3,
+                    borderWidth: 2,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: '📈 Price with Forecast',
+                    font: { size: 16 }
+                },
+                legend: { display: true }
             },
-            options: {
-                responsive: true,
-                plugins: {
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day',
+                        tooltipFormat: 'yyyy-MM-dd',
+                        displayFormats: { day: 'yyyy-MM-dd' }
+                    },
+                    ticks: {
+                        maxTicksLimit: 10,
+                        callback: function(value) {
+                            return new Date(value).toISOString().split('T')[0];
+                        }
+                    },
                     title: {
                         display: true,
-                        text: '📈 Closing Price Over Time',
-                        font: {
-                            size: 16
-                        }
-                    },
-                    legend: {
-                        display: false
+                        text: 'Date'
                     }
                 },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Date'
-                        },
-                        ticks: {
-                            autoSkip: true,
-                            maxTicksLimit: 15
-                        }
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Price ($)'
                     },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Price ($)'
-                        },
-                        beginAtZero: false
-                    }
+                    beginAtZero: false
                 }
             }
-        });
-    </script>
+        }
+    });
+</script>
 </body>
 </html>

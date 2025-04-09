@@ -150,7 +150,7 @@
         <tbody>
         {% for symbol, qty, current_price, beta in holdings %}
         <tr>
-            <td>{{ symbol }}</td>
+            <td> <a href="/stock/{{ symbol }}">{{ symbol }}</a></td>
             <td>{{ qty }}</td>
             <td>${{ "%.2f"|format(current_price) }}</td>
             <td>{{ beta if beta is not none else "N/A" }}</td>

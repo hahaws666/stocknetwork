@@ -109,7 +109,7 @@
         <tbody>
         {% for stock in stocks %}
         <tr>
-            <td>{{ stock[0] }}</td>
+            <td><a href="/stock/{{ stock[0] }}">{{ stock[0] }}</a></td>
             <td>${{ '%.2f'|format(stock[1]) }}</td>
             <td>{{ stock[2] }}</td>
             <td>{{ stock[3] if stock[3] is not none else 'N/A' }}</td>
