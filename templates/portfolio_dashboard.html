@@ -3,15 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <title>📂 Portfolio: {{ pname }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f9fc;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 85%;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 10px;
+        }
+
+        a {
+            text-decoration: none;
+            color: #007BFF;
+            font-size: 14px;
+        }
+
+        .balance {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        form {
+            margin: 10px 0 20px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="date"] {
+            padding: 6px;
+            margin-right: 8px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: 120px;
+        }
+
+        button {
+            background-color: #007BFF;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f0f0f0;
+        }
+
+        .buy {
+            color: green;
+            font-weight: bold;
+        }
+
+        .sell {
+            color: red;
+            font-weight: bold;
+        }
+
+        hr {
+            margin: 40px 0 20px;
+        }
+
+        canvas {
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body>
+<div class="container">
     <h1>📂 Portfolio: {{ pname }}</h1>
-    <p>💰 Cash Balance: ${{ "%.2f"|format(cashbalance) }}</p>
+    <div class="balance">💰 Cash Balance: <strong>${{ "%.2f"|format(cashbalance) }}</strong></div>
+    <a href="/portfolio_watchlist">← Back to Dashboard</a>
 
-    <a href="/portfolio_watchlist">← Back</a>
+    <hr>
+    <h3>📆 Select Interval</h3>
+    <form method="get">
+        <label>Start Date:</label>
+        <input type="date" name="start" value="{{ start }}">
+        <label>End Date:</label>
+        <input type="date" name="end" value="{{ end }}">
+        <button type="submit">Update Interval</button>
+    </form>
 
-    <h3>📈 Holdings</h3>
+    <h3>📈 Portfolio Value Chart</h3>
+    <canvas id="valueChart" width="600" height="250"></canvas>
 
+    <hr>
+    <h3>➕ Add / Sell Stock</h3>
     <form method="post" action="{{ url_for('buy_stock') }}">
         <input type="hidden" name="pname" value="{{ pname }}">
         Symbol: <input name="symbol" required>
@@ -19,66 +128,120 @@
         Date: <input type="date" name="date" required>
         <button type="submit">Buy</button>
     </form>
-    
     <form method="post" action="{{ url_for('sell_stock') }}">
         <input type="hidden" name="pname" value="{{ pname }}">
         Symbol: <input name="symbol" required>
         Qty: <input type="number" name="qty" required>
         Date: <input type="date" name="date" required>
-        <button type="submit">Sell</button>
+        <button type="submit" style="background-color: #dc3545;">Sell</button>
     </form>
-    
+
+    <h3>📘 Holdings</h3>
     {% if holdings %}
     <table>
         <thead>
-            <tr>
-                <th>Symbol</th>
-                <th>Quantity</th>
-            </tr>
+        <tr>
+            <th>Stock Symbol</th>
+            <th>Quantity</th>
+            <th>Current Price</th>
+            <th>Beta</th>
+        </tr>
         </thead>
         <tbody>
-            {% for symbol, qty in holdings %}
-            <tr>
-                <td>{{ symbol }}</td>
-                <td>{{ qty }}</td>
-            </tr>
-            {% endfor %}
+        {% for symbol, qty, current_price, beta in holdings %}
+        <tr>
+            <td>{{ symbol }}</td>
+            <td>{{ qty }}</td>
+            <td>${{ "%.2f"|format(current_price) }}</td>
+            <td>{{ beta if beta is not none else "N/A" }}</td>
+        </tr>
+        {% endfor %}
         </tbody>
     </table>
     {% else %}
     <p>This portfolio has no holdings.</p>
     {% endif %}
 
+    <hr>
+    <h3>📊 Covariance Matrix</h3>
+    {% if cov_matrix %}
+    <table>
+        <thead>
+        <tr>
+            <th></th>
+            {% for col in cov_matrix.keys() %}
+            <th>{{ col }}</th>
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for row, vals in cov_matrix.items() %}
+        <tr>
+            <td><strong>{{ row }}</strong></td>
+            {% for col in cov_matrix.keys() %}
+            <td>{{ vals[col]|default("—") }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Covariance data not available.</p>
+    {% endif %}
 
     <hr>
-<h2>📜 Transaction History</h2>
-
-{% if history %}
-<table>
-    <thead>
+    <h2>📜 Transaction History</h2>
+    {% if history %}
+    <table>
+        <thead>
         <tr>
             <th>Stock Symbol</th>
             <th>Quantity</th>
             <th>Type</th>
             <th>Date</th>
         </tr>
-    </thead>
-    <tbody>
+        </thead>
+        <tbody>
         {% for symbol, qty, ts in history %}
         <tr>
             <td>{{ symbol }}</td>
             <td>{{ qty|abs }}</td>
-            <td style="color: {{ 'green' if qty > 0 else 'red' }}">
+            <td class="{{ 'buy' if qty > 0 else 'sell' }}">
                 {{ 'Buy' if qty > 0 else 'Sell' }}
             </td>
             <td>{{ ts.strftime('%Y-%m-%d') }}</td>
         </tr>
         {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<p>No transaction history available.</p>
-{% endif %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No transaction history available.</p>
+    {% endif %}
+</div>
 
+<script>
+    const ctx = document.getElementById('valueChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_labels|tojson }},
+            datasets: [{
+                label: 'Portfolio Value',
+                data: {{ chart_values|tojson }},
+                borderColor: '#007BFF',
+                backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.2
+            }]
+        },
+        options: {
+            scales: {
+                x: { title: { display: true, text: 'Date' }},
+                y: { title: { display: true, text: 'Value ($)' }}
+            }
+        }
+    });
+</script>
 </body>
 </html>

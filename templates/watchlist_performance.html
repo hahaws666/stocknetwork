@@ -12,7 +12,6 @@
             margin: 0;
             padding: 0;
         }
-
         .container {
             width: 85%;
             max-width: 1000px;
@@ -23,38 +22,21 @@
             border-radius: 10px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-
-        h1, h2, h3 {
-            margin-bottom: 10px;
-        }
-
-        a {
-            text-decoration: none;
-            color: #007BFF;
-            margin-right: 15px;
-        }
-
-        canvas {
-            margin-top: 30px;
-        }
-
+        h1, h2, h3 { margin-bottom: 10px; }
+        a { text-decoration: none; color: #007BFF; margin-right: 15px; }
+        canvas { margin-top: 30px; }
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 25px;
             font-size: 14px;
         }
-
         th, td {
             padding: 10px;
             text-align: center;
             border-bottom: 1px solid #ddd;
         }
-
-        th {
-            background-color: #f0f0f0;
-        }
-
+        th { background-color: #f0f0f0; }
         .comment-box {
             border: 1px solid #ccc;
             padding: 10px;
@@ -62,218 +44,214 @@
             border-radius: 5px;
             background: #f9f9f9;
         }
-
-        .delete-button {
-            color: red;
-            cursor: pointer;
-            background: none;
-            border: none;
-        }
-
-        textarea {
-            width: 100%;
-            max-width: 100%;
-        }
-
-        .timestamp {
-            color: #888;
-            font-size: 0.9em;
-        }
-
-        hr {
-            margin: 40px 0;
-        }
+        .delete-button { color: red; cursor: pointer; background: none; border: none; }
+        textarea { width: 100%; max-width: 100%; }
+        .timestamp { color: #888; font-size: 0.9em; }
+        hr { margin: 40px 0; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📊 Watchlist: {{ watchlist_name }}</h1>
-        <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
-        <p>👤 Owner: {{ owner_name }}</p>             
-        {% if owner_name == current_user_id %}
-        <span class="visibility-toggle">
-            Visibility:
-            <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
-                <option value="0" {% if visibility_data == 0 %}selected{% endif %}>Private</option>
-                <option value="1" {% if visibility_data == 1 %}selected{% endif %}>Shared with Friends</option>
-                <option value="2" {% if visibility_data == 2 %}selected{% endif %}>Public</option>
-            </select>
-        </span>
-        {% endif %} <br>
-    
-        {% if history_data %}
-            <canvas id="watchlistChart"></canvas>
-        {% else %}
-            <p>No historical data available for this watchlist.</p>
-        {% endif %}
+<div class="container">
+    <h1>📊 Watchlist: {{ watchlist_name }}</h1>
+    <a href="/welcome">← Back to Home</a> | <a href="/logout">Logout</a>
+    <p>👤 Owner: {{ owner_name }}</p>
 
-        {% if owner_name == current_user_id %}
-        <hr>
-        <h3>➕ Add Stock to Watchlist</h3>
-        <form action="{{ url_for('add_to_watchlist') }}" method="post">
-            <input type="hidden" name="sname" value="{{ watchlist_name }}">
-            <label>Symbol: <input type="text" name="symbol" required></label>
-            <label>Quantity: <input type="number" name="quantity" value="1" min="1" required></label>
-            <button type="submit">Add</button>
-        </form>
-        {% endif %}
-        
-        <table>
-            <thead>
-                <tr>
-                    <th>Stock Symbol</th>
-                    <th>Current Price</th>
-                    <th>Quantity</th>
-                    {% if owner_name == current_user_id %}
-                    <th>Action</th>
-                    {% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for stock in stocks %}
-                <tr>
-                    <td>{{ stock[0] }}</td>
-                    <td>${{ "%.2f"|format(stock[1]) }}</td>
-                    <td>{{ stock[2] }}</td>
-                    {% if owner_name == current_user_id %}
-                    <td>
-                        <form action="{{ url_for('remove_stock_watchlist') }}" method="post" style="display:inline;">
-                            <input type="hidden" name="sname" value="{{ watchlist_name }}">
-                            <input type="hidden" name="symbol" value="{{ stock[0] }}">
-                            <input type="hidden" name="qty" value="{{ stock[2] }}">                            
-                            <button type="submit" class="delete-button">❌ Delete</button>
-                        </form>
-                    </td>
-                    {% endif %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    {% if owner_name == current_user_id %}
+    <span class="visibility-toggle">
+        Visibility:
+        <select onchange="toggleVisibility('{{ watchlist_name }}', this.value)">
+            <option value="0" {% if visibility_data == 0 %}selected{% endif %}>Private</option>
+            <option value="1" {% if visibility_data == 1 %}selected{% endif %}>Shared with Friends</option>
+            <option value="2" {% if visibility_data == 2 %}selected{% endif %}>Public</option>
+        </select>
+    </span>
+    {% endif %}
 
-        <hr>
-        <h2>📋 Review</h2>
+    <hr>
+    <h3>📆 Select Interval</h3>
+    <form method="get">
+        <label>Start Date:</label>
+        <input type="date" name="start" value="{{ start }}">
+        <label>End Date:</label>
+        <input type="date" name="end" value="{{ end }}">
+        <button type="submit">Update</button>
+    </form>
 
-        {% for comment in comments %}
-            <div class="comment-box">
-                <strong>{{ comment[2] }}</strong>  
-                {% if comment[2] == current_user_id or owner_name == current_user_id %}
-                <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment') }}" method="post" style="display:inline;" onsubmit="confirmDelete({{ comment[0] }})">
-                    <input type="hidden" name="comment_id" value="{{ comment[0] }}">
-                    <input type="hidden" name="owner_name" value="{{ owner_name }}">
-                    <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
-                    <input type="hidden" name="writer" value="{{ comment[2] }}">
+    {% if history_data %}
+    <canvas id="watchlistChart"></canvas>
+    {% else %}
+    <p>No historical data available for this watchlist.</p>
+    {% endif %}
+
+    {% if owner_name == current_user_id %}
+    <hr>
+    <h3>➕ Add Stock to Watchlist</h3>
+    <form action="{{ url_for('add_to_watchlist') }}" method="post">
+        <input type="hidden" name="sname" value="{{ watchlist_name }}">
+        <label>Symbol: <input type="text" name="symbol" required></label>
+        <label>Quantity: <input type="number" name="quantity" value="1" min="1" required></label>
+        <button type="submit">Add</button>
+    </form>
+    {% endif %}
+
+    <table>
+        <thead>
+        <tr>
+            <th>Stock Symbol</th>
+            <th>Current Price</th>
+            <th>Quantity</th>
+            <th>Beta</th>
+            {% if owner_name == current_user_id %}
+            <th>Action</th>
+            {% endif %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for stock in stocks %}
+        <tr>
+            <td>{{ stock[0] }}</td>
+            <td>${{ '%.2f'|format(stock[1]) }}</td>
+            <td>{{ stock[2] }}</td>
+            <td>{{ stock[3] if stock[3] is not none else 'N/A' }}</td>
+            {% if owner_name == current_user_id %}
+            <td>
+                <form action="{{ url_for('remove_stock_watchlist') }}" method="post" style="display:inline;">
+                    <input type="hidden" name="sname" value="{{ watchlist_name }}">
+                    <input type="hidden" name="symbol" value="{{ stock[0] }}">
+                    <input type="hidden" name="qty" value="{{ stock[2] }}">
                     <button type="submit" class="delete-button">❌ Delete</button>
                 </form>
-            {% endif %} <br>
-                <!-- <span class="timestamp" data-time="{{ comment[4] }}"></span><br> -->
-                {{ comment[3] }}
-            </div>
-        {% else %}
-            <p>No comments yet.</p>
+            </td>
+            {% endif %}
+        </tr>
         {% endfor %}
-        
-    
-        <hr>
-        <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
-        <form method="post" action="{{ url_for('submit_comment') }}" onsubmit="clearTextArea()">
+        </tbody>
+    </table>
+
+    <hr>
+    <h3>📊 Covariance Matrix</h3>
+    {% if cov_matrix %}
+    <table>
+        <thead>
+        <tr>
+            <th></th>
+            {% for col in cov_matrix.keys() %}
+            <th>{{ col }}</th>
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for row, vals in cov_matrix.items() %}
+        <tr>
+            <td><strong>{{ row }}</strong></td>
+            {% for col in cov_matrix.keys() %}
+            <td>{{ vals[col]|default('—') }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>Covariance matrix not available.</p>
+    {% endif %}
+
+    <hr>
+    <h2>📋 Review</h2>
+    {% for comment in comments %}
+    <div class="comment-box">
+        <strong>{{ comment[2] }}</strong>
+        {% if comment[2] == current_user_id or owner_name == current_user_id %}
+        <form id="delete-form-{{ comment[0] }}" action="{{ url_for('delete_comment') }}" method="post" style="display:inline;" onsubmit="confirmDelete({{ comment[0] }})">
+            <input type="hidden" name="comment_id" value="{{ comment[0] }}">
             <input type="hidden" name="owner_name" value="{{ owner_name }}">
             <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
-            <textarea id="commentText" name="text" rows="4" maxlength="4000" required>{{ my_comment[1] if my_comment else '' }}</textarea><br>
-            <button type="submit">Submit</button>
+            <input type="hidden" name="writer" value="{{ comment[2] }}">
+            <button type="submit" class="delete-button">❌ Delete</button>
         </form>
+        {% endif %}
+        <br>{{ comment[3] }}
     </div>
+    {% else %}
+    <p>No comments yet.</p>
+    {% endfor %}
 
-    <script>
-        const historyData = {{ history_data | tojson }};
-        if (historyData.length > 0) {
-            new Chart(document.getElementById("watchlistChart"), {
-                type: 'line',
-                data: {
-                    labels: historyData.map(point => new Date(point.date)),
-                    datasets: [{
-                        label: "Total Watchlist Value ($)",
-                        data: historyData.map(point => point.price),
-                        borderColor: '#007BFF',
-                        backgroundColor: 'rgba(0,123,255,0.1)',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: '📈 Watchlist Value Over Time',
-                            font: {
-                                size: 16
-                            }
-                        },
-                        legend: {
-                            display: false
-                        }
+    <hr>
+    <h3>{{ my_comment and "✏️ Edit Your Comment" or "📝 Post Your Comment" }}</h3>
+    <form method="post" action="{{ url_for('submit_comment') }}" onsubmit="clearTextArea()">
+        <input type="hidden" name="owner_name" value="{{ owner_name }}">
+        <input type="hidden" name="watchlist_name" value="{{ watchlist_name }}">
+        <textarea id="commentText" name="text" rows="4" maxlength="4000" required>{{ my_comment[0] if my_comment else '' }}</textarea><br>
+        <button type="submit">Submit</button>
+    </form>
+</div>
+
+<script>
+    const historyData = {{ history_data | tojson }};
+    if (historyData.length > 0) {
+        new Chart(document.getElementById("watchlistChart"), {
+            type: 'line',
+            data: {
+                labels: historyData.map(point => new Date(point.date)),
+                datasets: [{
+                    label: "Total Watchlist Value ($)",
+                    data: historyData.map(point => point.price),
+                    borderColor: '#007BFF',
+                    backgroundColor: 'rgba(0,123,255,0.1)',
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: "📈 Watchlist Value Over Time",
+                        font: { size: 16 }
                     },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                unit: 'month',
-                                tooltipFormat: 'yyyy-MM-dd',
-                                displayFormats: {
-                                    month: 'MMM yyyy'
-                                }
-                            },
-                            title: {
-                                display: true,
-                                text: 'Date'
-                            }
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'month',
+                            tooltipFormat: 'yyyy-MM-dd',
+                            displayFormats: { month: 'MMM yyyy' }
                         },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Total Value ($)'
-                            },
-                            beginAtZero: false
-                        }
+                        title: { display: true, text: "Date" }
+                    },
+                    y: {
+                        title: { display: true, text: "Total Value ($)" },
+                        beginAtZero: false
                     }
                 }
-            });
-        }
-
-        function confirmDelete(commentId) {
-            if (confirm("Are you sure you want to delete this comment?")) {
-                document.getElementById("delete-form-" + commentId).submit();
             }
-        }
+        });
+    }
 
-        function formatTimestamps() {
-            document.querySelectorAll('.timestamp').forEach(span => {
-                const date = new Date(span.dataset.time);
-                span.innerText = new Intl.DateTimeFormat('en-US', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short'
-                }).format(date);
-            });
+    function confirmDelete(commentId) {
+        if (confirm("Are you sure you want to delete this comment?")) {
+            document.getElementById("delete-form-" + commentId).submit();
         }
+    }
 
-        function clearTextArea() {
-            setTimeout(() => document.getElementById("commentText").value = "", 100);
-        }
+    function clearTextArea() {
+        setTimeout(() => document.getElementById("commentText").value = "", 100);
+    }
 
-        window.onload = formatTimestamps;
-        
-        function toggleVisibility(watchlistName, visible) {
-            fetch("/toggle_visibility", {
-                method: "POST",
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ watchlist_name: watchlistName, visible: parseInt(visible) })
-            })
-            .then(response => response.json())
-            .then(data => alert(data.message))
-            .catch(err => console.error("Toggle failed", err));
-        }
-    </script>
+    function toggleVisibility(watchlistName, visible) {
+        fetch("/toggle_visibility", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ watchlist_name: watchlistName, visible: parseInt(visible) })
+        })
+        .then(response => response.json())
+        .then(data => alert(data.message))
+        .catch(err => console.error("Toggle failed", err));
+    }
+</script>
 </body>
 </html>

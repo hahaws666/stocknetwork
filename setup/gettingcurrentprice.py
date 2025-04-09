@@ -11,22 +11,19 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
-query ="""
+query = """
 UPDATE stock
-SET current_price = (
-    SELECT close_price
+SET current_price = latest_prices.close_price
+FROM (
+    SELECT DISTINCT ON (symbol) symbol, close_price
     FROM stockhistory
-    WHERE stock.symbol = stockhistory.symbol
-      AND date = '2018-02-07'
-)
-WHERE EXISTS (
-    SELECT 1
-    FROM stockhistory
-    WHERE stock.symbol = stockhistory.symbol
-      AND date = '2018-02-07'
-);
+    ORDER BY symbol, date DESC
+) AS latest_prices
+WHERE stock.symbol = latest_prices.symbol;
 """
+
 cursor.execute(query)
 conn.commit()
+
 cursor.close()
 conn.close()

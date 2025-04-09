@@ -208,7 +208,7 @@
         </ul>
     </div>
 
-    <div class="section">
+    <!-- <div class="section">
         <h2>🗂️ Accessible Public Stocklists</h2>
         <ul>
             {% for owner_name, list_name in public_watchlists %}
@@ -222,14 +222,15 @@
             <li>No public stocklists available.</li>
             {% endfor %}
         </ul>
-    </div>
+    </div> -->
 
     <div class="section">
-        <h2>🌐 All Public Stocklists</h2>
+        <h2>🌐 Accessible Stocklists</h2>
         <ul>
-            {% for owner_name, list_name in public_stocklists %}
+            {% set visibility_labels = {0: 'Private', 1: 'Shared with Friends', 2: 'Public'} %}
+            {% for owner_name, list_name, visible in public_stocklists %}
             <li style="display: flex; justify-content: space-between; align-items: center;">
-                <span class="stocklist-name">{{ owner_name }}'s "{{ list_name }}"</span>
+                <span class="stocklist-name">{{ list_name }} by {{ owner_name }}. Visibility: {{ visibility_labels[visible] }}</span>
                 <span>
                     <a href="{{ url_for('watchlist_performance', owner_name=owner_name, watchlist_name=list_name) }}">View Performance</a>
                 </span>
